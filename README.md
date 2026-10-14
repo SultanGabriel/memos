@@ -1,3 +1,5 @@
+> **About this fork:** This is my personal fork of Memos, where I add tweaks and features I wished were available for my own use. If you find it useful, you're welcome to use it as is. See the [fork changelog](CHANGELOG.md) for what's been added and changed. Consider yourself warned.
+
 > ✨ Featured sponsor: [CodeRabbit — Industry-leading AI code reviews](https://coderabbit.link/usememos).
 
 # Memos
