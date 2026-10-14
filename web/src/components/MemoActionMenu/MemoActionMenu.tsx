@@ -28,8 +28,10 @@ import {
   DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import useCurrentUser from "@/hooks/useCurrentUser";
 import { State } from "@/types/proto/api/common_pb";
 import { useTranslate } from "@/utils/i18n";
+import { canManageMemo } from "@/utils/user";
 import { createMemoNavigationState } from "../MemoView/navigation";
 import { useMemoActionHandlers } from "./hooks";
 import type { MemoActionMenuProps } from "./types";
@@ -39,11 +41,12 @@ import type { MemoActionMenuProps } from "./types";
  * write on it (Edit, the task action), place it (Pin, Archive), reach it beyond
  * the feed (Open its page, Copy its link or content), then Delete last.
  * A memo's Space is changed in the editor, not here. An archived memo offers
- * only Restore and Delete, and a viewer only Open and Copy.
+ * Restore, Rich Editor, and Delete, and a viewer only Open and Copy.
  */
 const MemoActionMenu = (props: MemoActionMenuProps) => {
   const { memo, parentPage, readonly } = props;
   const t = useTranslate();
+  const currentUser = useCurrentUser();
 
   // Dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -112,6 +115,13 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
     </DropdownMenuItem>
   );
 
+  const richEditorItem = canManageMemo(memo, currentUser) && (
+    <DropdownMenuLinkItem closeOnClick render={<Link to={`/${memo.name}/rich-editor`} />}>
+      <FileTextIcon />
+      Open in Rich Editor
+    </DropdownMenuLinkItem>
+  );
+
   const renderItems = () => {
     if (readonly) {
       return (
@@ -129,6 +139,7 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
             <ArchiveRestoreIcon />
             {t("common.restore")}
           </DropdownMenuItem>
+          {richEditorItem}
           <DropdownMenuSeparator />
           {deleteItem}
         </>
@@ -141,6 +152,7 @@ const MemoActionMenu = (props: MemoActionMenuProps) => {
           <Edit3Icon />
           {t("common.edit")}
         </DropdownMenuItem>
+        {richEditorItem}
         {/* One task action at a time: finish the open tasks, or reset a finished list. */}
         {hasTaskList &&
           (hasOpenTasks ? (

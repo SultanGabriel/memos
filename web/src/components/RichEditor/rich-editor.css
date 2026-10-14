@@ -1,0 +1,75 @@
+.rich-editor {
+  --md-heading: var(--foreground);
+  --md-bold: var(--foreground);
+  --md-italic: var(--foreground);
+  --md-link: var(--primary);
+  --md-code-bg: var(--muted);
+  font-size: 1rem;
+}
+
+.rich-editor img {
+  max-width: 100%;
+  height: auto;
+}
+
+.rich-editor .cm-editor .cm-rich-editor-tag {
+  color: var(--primary);
+  background-color: color-mix(in srgb, var(--primary) 12%, transparent);
+  border-radius: 999px;
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--primary) 12%, transparent);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+
+.rich-editor .cm-editor table {
+  max-width: 100%;
+  border-collapse: collapse;
+  color: var(--foreground);
+  background: var(--background);
+}
+
+.rich-editor .cm-editor th,
+.rich-editor .cm-editor td {
+  padding: 0.4rem 0.75rem;
+  border: 1px solid var(--border);
+}
+
+/* The preview package expects HSL channels; Memos variables contain full colors. */
+.rich-editor .cm-editor .cm-header-1,
+.rich-editor .cm-editor .cm-header-2,
+.rich-editor .cm-editor .cm-header-3,
+.rich-editor .cm-editor .cm-header-4,
+.rich-editor .cm-editor .cm-header-5,
+.rich-editor .cm-editor .cm-header-6,
+.rich-editor .cm-editor .cm-strong,
+.rich-editor .cm-editor .cm-emphasis {
+  color: var(--foreground);
+}
+
+.rich-editor .cm-editor .cm-formatting-inline,
+.rich-editor .cm-editor .cm-formatting-block,
+.rich-editor .cm-editor .cm-strikethrough,
+.rich-editor .cm-editor .cm-codeblock-fence,
+.rich-editor .cm-editor .cm-image-alt,
+.rich-editor .cm-editor .cm-image-loading {
+  color: var(--muted-foreground);
+}
+
+.rich-editor .cm-editor .cm-link,
+.rich-editor .cm-editor .cm-link-widget,
+.rich-editor .cm-editor .cm-wikilink-widget {
+  color: var(--primary);
+}
+
+.rich-editor .cm-editor .cm-code,
+.rich-editor .cm-editor .cm-codeblock-widget,
+.rich-editor .cm-editor .cm-image-loading,
+.rich-editor .cm-editor .cm-image-info,
+.rich-editor .cm-editor th {
+  background-color: var(--muted);
+}
+
+.rich-editor .cm-editor .cm-codeblock-copy {
+  color: var(--foreground);
+  background-color: var(--background);
+}

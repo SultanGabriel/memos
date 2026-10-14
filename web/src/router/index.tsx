@@ -20,6 +20,7 @@ const Calendar = lazyWithReload(() => import("@/pages/Calendar"));
 const Home = lazyWithReload(() => import("@/pages/Home"));
 const Inboxes = lazyWithReload(() => import("@/pages/Inboxes"));
 const MemoDetail = lazyWithReload(() => import("@/pages/MemoDetail"));
+const MemoRichEditor = lazyWithReload(() => import("@/pages/MemoRichEditor"));
 const NotFound = lazyWithReload(() => import("@/pages/NotFound"));
 const PermissionDenied = lazyWithReload(() => import("@/pages/PermissionDenied"));
 const Attachments = lazyWithReload(() => import("@/pages/Attachments"));
@@ -121,6 +122,7 @@ export const routeConfig: RouteObject[] = [
           {
             element: <RequireAuthRoute />,
             children: [
+              { path: "memos/:uid/rich-editor", element: <MemoRichEditor /> },
               {
                 element: <RequireFullInitializationRoute />,
                 children: [

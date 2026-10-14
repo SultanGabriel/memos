@@ -1,3 +1,4 @@
+import { FileTextIcon } from "lucide-react";
 import { Link, useLocation } from "react-router-dom";
 import RelativeTime from "@/components/RelativeTime";
 import { Button, buttonVariants } from "@/components/ui/button";
@@ -85,6 +86,20 @@ const MemoHeader: React.FC<MemoHeaderProps> = ({ timeDisplay = "relative", showC
           // On desktop the picker's trigger shows only while the card is engaged or the picker is open.
           <span className="flex sm:hidden sm:group-hover:flex sm:group-focus-within:flex sm:has-[[data-popup-open]]:flex">
             <ReactionSelector memo={memo} trigger={<Button variant="quiet" size="icon-sm" />} />
+          </span>
+        )}
+
+        {!readonly && (
+          <span className="flex sm:hidden sm:group-hover:flex sm:group-focus-within:flex">
+            <Tooltip>
+              <TooltipTrigger
+                aria-label="Open in Rich Editor"
+                render={<Link to={`/${memo.name}/rich-editor`} className={MEMO_HEADER_ACTION_CLASSES} />}
+              >
+                <FileTextIcon className="size-4" strokeWidth={1.8} />
+              </TooltipTrigger>
+              <TooltipContent>Open in Rich Editor</TooltipContent>
+            </Tooltip>
           </span>
         )}
 
