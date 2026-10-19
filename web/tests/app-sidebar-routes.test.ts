@@ -11,6 +11,8 @@ describe("sidebar route content", () => {
     ["/u/steven", "common"],
     ["/U/Steven/", "common"],
     ["/views", "views"],
+    ["/whiteboards", "whiteboards"],
+    ["/whiteboards/board-one", "whiteboards"],
     ["/Views/", "views"],
     ["/calendar", "calendar"],
     ["/calendar/2026/08", "calendar"],

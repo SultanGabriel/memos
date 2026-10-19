@@ -3374,6 +3374,172 @@ paths:
                         application/json:
                             schema:
                                 $ref: '#/components/schemas/Status'
+    /api/whiteboards:
+        get:
+            tags:
+                - WhiteboardService
+            description: ListWhiteboards lists the caller's boards, or all boards for an administrator.
+            operationId: WhiteboardService_ListWhiteboards
+            parameters:
+                - name: pageSize
+                  in: query
+                  description: Optional. Page size, default 50, maximum 1000.
+                  schema:
+                    type: integer
+                    format: int32
+                - name: pageToken
+                  in: query
+                  description: Optional. Token returned by a previous list with the same filter and ordering.
+                  schema:
+                    type: string
+                - name: filter
+                  in: query
+                  description: Optional. CEL filter, for example title.contains("plan") or "work" in tags.
+                  schema:
+                    type: string
+                - name: orderBy
+                  in: query
+                  description: Optional. One of update_time, create_time, title, with asc or desc. Default update_time desc.
+                  schema:
+                    type: string
+                - name: state
+                  in: query
+                  description: Optional. Lifecycle state; unspecified selects NORMAL.
+                  schema:
+                    enum:
+                        - STATE_UNSPECIFIED
+                        - NORMAL
+                        - ARCHIVED
+                    type: string
+                    format: enum
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListWhiteboardsResponse'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        post:
+            tags:
+                - WhiteboardService
+            description: CreateWhiteboard immediately creates a board owned by the caller.
+            operationId: WhiteboardService_CreateWhiteboard
+            parameters:
+                - name: whiteboardId
+                  in: query
+                  description: Optional. Public UID; generated when omitted.
+                  schema:
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Whiteboard'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Whiteboard'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+    /api/whiteboards/{whiteboard}:
+        get:
+            tags:
+                - WhiteboardService
+            description: GetWhiteboard gets a board owned by the caller or accessible to an administrator.
+            operationId: WhiteboardService_GetWhiteboard
+            parameters:
+                - name: whiteboard
+                  in: path
+                  description: The whiteboard id.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Whiteboard'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        delete:
+            tags:
+                - WhiteboardService
+            description: DeleteWhiteboard permanently deletes a board without deleting its attachments.
+            operationId: WhiteboardService_DeleteWhiteboard
+            parameters:
+                - name: whiteboard
+                  in: path
+                  description: The whiteboard id.
+                  required: true
+                  schema:
+                    type: string
+            responses:
+                "200":
+                    description: OK
+                    content: {}
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
+        patch:
+            tags:
+                - WhiteboardService
+            description: UpdateWhiteboard updates the explicitly masked mutable fields.
+            operationId: WhiteboardService_UpdateWhiteboard
+            parameters:
+                - name: whiteboard
+                  in: path
+                  description: The whiteboard id.
+                  required: true
+                  schema:
+                    type: string
+                - name: updateMask
+                  in: query
+                  description: 'Required. Mutable fields: title, tags, document, thumbnail, state.'
+                  schema:
+                    type: string
+                    format: field-mask
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/Whiteboard'
+                required: true
+            responses:
+                "200":
+                    description: OK
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Whiteboard'
+                default:
+                    description: Default error response
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Status'
 components:
     schemas:
         AcceptSpaceInvitationRequest:
@@ -4604,6 +4770,18 @@ components:
                     type: string
                     description: A token to retrieve the next page. Empty when there are no more pages.
             description: Response message for UserService.ListUsers.
+        ListWhiteboardsResponse:
+            type: object
+            properties:
+                whiteboards:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/Whiteboard'
+                    description: Authorized boards; use GetWhiteboard to load a document.
+                nextPageToken:
+                    type: string
+                    description: Token for the next page, or empty at the end.
+            description: ListWhiteboardsResponse contains metadata without document snapshots.
         Location:
             type: object
             properties:
@@ -6020,6 +6198,53 @@ components:
                     description: The duration of the video in seconds.
                     format: double
             description: VideoMetadata is metadata recorded by the source of a video.
+        Whiteboard:
+            type: object
+            properties:
+                name:
+                    type: string
+                    description: 'Identifier. Format: whiteboards/{whiteboard}'
+                creator:
+                    readOnly: true
+                    type: string
+                    description: 'Output only. Format: users/{user}'
+                title:
+                    type: string
+                    description: Optional. Defaults to Untitled Whiteboard when blank.
+                tags:
+                    type: array
+                    items:
+                        type: string
+                    description: Optional. Independent metadata tags, trimmed and deduplicated by exact spelling.
+                document:
+                    type: string
+                    description: |-
+                        Optional. JSON object containing only the tldraw document snapshot, never session state.
+                         An empty object represents a new drawing. Image bytes must use AttachmentService.
+                thumbnail:
+                    type: string
+                    description: |-
+                        Optional. Unlinked image attachment reference; empty clears the thumbnail.
+                         Format: attachments/{attachment}
+                state:
+                    enum:
+                        - STATE_UNSPECIFIED
+                        - NORMAL
+                        - ARCHIVED
+                    type: string
+                    description: Optional. NORMAL by default; ARCHIVED boards are excluded from the default list.
+                    format: enum
+                createTime:
+                    readOnly: true
+                    type: string
+                    description: Output only. Creation time.
+                    format: date-time
+                updateTime:
+                    readOnly: true
+                    type: string
+                    description: Output only. Last metadata or document update time.
+                    format: date-time
+            description: Whiteboard is a document snapshot and metadata, separate from memos.
 tags:
     - name: AIService
       description: AIService runs AI tasks through the AI providers configured on the instance.
@@ -6042,3 +6267,5 @@ tags:
         UserService manages users and the resources they own: settings, statistics,
          memo views, notifications, webhooks, linked identities, personal access
          tokens, and memo export files.
+    - name: WhiteboardService
+      description: WhiteboardService manages private, single-editor drawing documents.

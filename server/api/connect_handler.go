@@ -40,6 +40,7 @@ func (s *ConnectServiceHandler) RegisterConnectHandlers(mux *http.ServeMux, opts
 		wrap(apiconnect.NewUserServiceHandler(s, opts...)),
 		wrap(apiconnect.NewMemoServiceHandler(s, opts...)),
 		wrap(apiconnect.NewSpaceServiceHandler(s, opts...)),
+		wrap(apiconnect.NewWhiteboardServiceHandler(s, opts...)),
 		wrap(apiconnect.NewAttachmentServiceHandler(s, opts...)),
 		wrap(apiconnect.NewAIServiceHandler(s, opts...)),
 		wrap(apiconnect.NewIdentityProviderServiceHandler(s, opts...)),

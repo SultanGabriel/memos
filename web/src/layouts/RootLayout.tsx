@@ -1,6 +1,6 @@
 import type { CSSProperties } from "react";
 import { useEffect, useRef } from "react";
-import { Navigate, Outlet, useLocation, useSearchParams } from "react-router-dom";
+import { matchPath, Navigate, Outlet, useLocation, useSearchParams } from "react-router-dom";
 import AppSidebar, {
   MobileAppHeader,
   MobileAppSidebar,
@@ -48,8 +48,9 @@ const RootLayoutContent = () => {
   const { profile } = useInstance();
   const { removeFilter } = useMemoFilterContext();
   const { pathname } = location;
-  // The map fills the viewport and scrolls inside itself, so the document must not.
-  const fullBleed = resolveCollectionRoute(pathname).pathname.toLowerCase() === ROUTES.MAP;
+  // Canvas views fill the viewport and manage their own scrolling.
+  const fullBleed =
+    resolveCollectionRoute(pathname).pathname.toLowerCase() === ROUTES.MAP || Boolean(matchPath("/whiteboards/:uid", pathname));
   const prevPathnameRef = useRef<string | undefined>(undefined);
   const shellRef = useRef<HTMLDivElement>(null);
   const { width: sidebarWidth, minWidth, maxWidth, setWidth: setSidebarWidth } = useSidebarWidth();

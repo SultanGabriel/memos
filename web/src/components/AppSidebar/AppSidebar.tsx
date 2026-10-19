@@ -13,6 +13,7 @@ import {
   MapIcon,
   MenuIcon,
   PaperclipIcon,
+  PencilRulerIcon,
   SearchIcon,
   SquarePenIcon,
   Trash2Icon,
@@ -43,6 +44,7 @@ import { cn } from "@/lib/utils";
 import { collectionNavigationPath, ROUTES } from "@/router/routes";
 import { User_Role, UserNotification_Status } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
+import "@/components/Whiteboard/whiteboard.css";
 import CommonSidebarContent from "./CommonSidebarContent";
 import { getSidebarRouteKind } from "./routes";
 import SidebarRow, { SIDEBAR_ROW_CLASSES, SIDEBAR_ROW_FOCUS_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
@@ -382,6 +384,7 @@ const GlobalNavigation = () => {
 
 const AppSidebar = ({ className }: { className?: string }) => {
   const t = useTranslate();
+  const location = useLocation();
   const currentUser = useCurrentUser();
   const { setMobileOpen } = useAppSidebar();
   const { canOpen: canCompose, openEditor } = useGlobalMemoEditor();
@@ -392,6 +395,21 @@ const AppSidebar = ({ className }: { className?: string }) => {
         {canCompose && <NewMemoAction onClick={openEditor} />}
       </div>
       <GlobalNavigation />
+      {currentUser && (
+        <Link
+          to={ROUTES.WHITEBOARDS}
+          onClick={() => setMobileOpen(false)}
+          aria-current={getSidebarRouteKind(location.pathname) === "whiteboards" ? "page" : undefined}
+          className={cn(
+            "whiteboard-ui whiteboard-nav mx-3 mt-2",
+            SIDEBAR_ROW_CLASSES,
+            getSidebarRouteKind(location.pathname) !== "whiteboards" && sidebarRowStateClasses("idle"),
+          )}
+        >
+          <SidebarRowIconSlot icon={PencilRulerIcon} />
+          <span>{t("whiteboards.title")}</span>
+        </Link>
+      )}
       <div className="mx-3 mt-2 border-t border-border/70" />
       <div className={cn("min-h-0 flex-1 overflow-y-auto overflow-x-hidden pt-2 pb-3 [scrollbar-width:thin]", SIDEBAR_RAIL_CLASSES)}>
         <RouteSidebarContent />

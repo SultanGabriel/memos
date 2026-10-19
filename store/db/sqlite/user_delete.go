@@ -136,6 +136,9 @@ func deleteUserTargetsTx(ctx context.Context, tx dbExecutor, userID int32, targe
 	if err := deleteMemoRelationsTx(ctx, tx, memoIDs); err != nil {
 		return err
 	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM whiteboard WHERE creator_id = ?", userID); err != nil {
+		return errors.Wrap(err, "failed to delete user whiteboards")
+	}
 	if err := deleteUserRowTx(ctx, tx, userID); err != nil {
 		return err
 	}

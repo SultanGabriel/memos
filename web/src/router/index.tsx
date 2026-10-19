@@ -28,6 +28,8 @@ const Setting = lazyWithReload(() => import("@/pages/Setting"));
 const MemoViews = lazyWithReload(() => import("@/pages/MemoViews"));
 const SignIn = lazyWithReload(() => import("@/pages/SignIn"));
 const SignUp = lazyWithReload(() => import("@/pages/SignUp"));
+const Whiteboards = lazyWithReload(() => import("@/pages/Whiteboards"));
+const WhiteboardDetail = lazyWithReload(() => import("@/pages/WhiteboardDetail"));
 
 const HomeRoute = () => {
   const { isIdentityInitialized } = useAuth();
@@ -105,6 +107,7 @@ export const routeConfig: RouteObject[] = [
                 element: <RequireAuthRoute />,
                 children: [
                   { path: Routes.ARCHIVED, element: <Archived /> },
+                  { path: Routes.WHITEBOARDS, element: <Whiteboards /> },
                   {
                     element: <RequireFullInitializationRoute />,
                     children: [{ path: Routes.VIEWS, element: <MemoViews /> }],
@@ -123,6 +126,7 @@ export const routeConfig: RouteObject[] = [
             element: <RequireAuthRoute />,
             children: [
               { path: "memos/:uid/rich-editor", element: <MemoRichEditor /> },
+              { path: "whiteboards/:uid", element: <WhiteboardDetail /> },
               {
                 element: <RequireFullInitializationRoute />,
                 children: [

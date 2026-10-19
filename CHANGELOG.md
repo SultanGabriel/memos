@@ -4,7 +4,18 @@ Changes specific to this personal fork of Memos. Fork release tags use `v0.x.x`,
 
 Add upcoming changes under **Unreleased**, then move them into a new version section when tagging a release. Keep the newest release first and group entries under Added, Changed, or Fixed as needed.
 
-## Unreleased
+## v0.2.0 — Unreleased
+
+### Added
+
+- Whiteboards (WIP): a separate, private tldraw feature with a top-level sidebar entry, searchable card library, tags, sorting, and immediate creation.
+- Whiteboard APIs and persistence for SQLite, MySQL, and PostgreSQL, with creator/admin access and attachment-backed images and previews.
+- Document-only autosave, Ctrl/Cmd+S, unsaved-change protection, independent title/tag updates, and a movable application bar.
+- Client-generated previews with failure-safe replacement and old-thumbnail cleanup; image uploads and preview regeneration are disabled for admins editing another user's board.
+
+### Fixed
+
+- Keep the Whiteboard editor/store stable across drawing, save-status updates, and background query changes so new strokes are preserved.
 
 ## v0.1.0 — 2026-10-14
 

@@ -10,6 +10,7 @@ import { InstanceService } from "./types/proto/api/instance_service_pb";
 import { MemoService } from "./types/proto/api/memo_service_pb";
 import { SpaceService } from "./types/proto/api/space_service_pb";
 import { UserService } from "./types/proto/api/user_service_pb";
+import { WhiteboardService } from "./types/proto/api/whiteboard_service_pb";
 import { redirectOnAuthFailure } from "./utils/auth-redirect";
 
 interface RequestWithHeader {
@@ -198,6 +199,7 @@ export const memoServiceClient = createClient(MemoService, transport);
 export const attachmentServiceClient = createClient(AttachmentService, transport);
 export const aiServiceClient = createClient(AIService, transport);
 export const spaceServiceClient = createClient(SpaceService, transport);
+export const whiteboardServiceClient = createClient(WhiteboardService, transport);
 
 // Configuration service clients
 export const identityProviderServiceClient = createClient(IdentityProviderService, transport);

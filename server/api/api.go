@@ -62,6 +62,7 @@ type APIService struct {
 	apipb.UnimplementedUserServiceServer
 	apipb.UnimplementedMemoServiceServer
 	apipb.UnimplementedSpaceServiceServer
+	apipb.UnimplementedWhiteboardServiceServer
 	apipb.UnimplementedAttachmentServiceServer
 	apipb.UnimplementedAIServiceServer
 	apipb.UnimplementedIdentityProviderServiceServer
@@ -202,6 +203,9 @@ func (s *APIService) RegisterGateway(ctx context.Context, echoServer *echo.Echo)
 	}
 	if err := apipb.RegisterMemoServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err
+	}
+	if err := apipb.RegisterWhiteboardServiceHandlerServer(ctx, gwMux, s); err != nil {
+		return errors.Wrap(err, "failed to register whiteboard service")
 	}
 	if err := apipb.RegisterSpaceServiceHandlerServer(ctx, gwMux, s); err != nil {
 		return err

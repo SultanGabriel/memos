@@ -1,0 +1,34 @@
+.whiteboard-ui {
+  --whiteboard-accent: #9c5d65;
+  --whiteboard-accent-soft: #9c5d6518;
+}
+
+.whiteboard-dark,
+.dark .whiteboard-ui {
+  --whiteboard-accent: #d59aa2;
+  --whiteboard-accent-soft: #d59aa220;
+}
+
+.whiteboard-nav[aria-current="page"] {
+  color: var(--whiteboard-accent);
+  background: var(--whiteboard-accent-soft);
+}
+
+.whiteboard-ui .whiteboard-action {
+  background: var(--whiteboard-accent);
+  color: white;
+}
+
+.whiteboard-ui .whiteboard-bar {
+  border-block: 1px solid var(--border);
+  box-shadow: inset 3px 0 var(--whiteboard-accent);
+}
+
+.whiteboard-ui .whiteboard-card:hover {
+  border-color: var(--whiteboard-accent);
+}
+
+.whiteboard-ui input:focus-visible {
+  outline: 2px solid var(--whiteboard-accent);
+  outline-offset: 2px;
+}
