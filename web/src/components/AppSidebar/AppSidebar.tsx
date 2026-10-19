@@ -45,6 +45,8 @@ import { collectionNavigationPath, ROUTES } from "@/router/routes";
 import { User_Role, UserNotification_Status } from "@/types/proto/api/user_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import "@/components/Whiteboard/whiteboard.css";
+import WhiteboardSidebarSlot from "@/components/Whiteboard/WhiteboardSidebarSlot";
+import WhiteboardSidebarToggle from "@/components/Whiteboard/WhiteboardSidebarToggle";
 import CommonSidebarContent from "./CommonSidebarContent";
 import { getSidebarRouteKind } from "./routes";
 import SidebarRow, { SIDEBAR_ROW_CLASSES, SIDEBAR_ROW_FOCUS_CLASSES, SidebarRowIconSlot, sidebarRowStateClasses } from "./SidebarRow";
@@ -265,6 +267,7 @@ const RouteSidebarContent = () => {
   if (kind === "inbox") return <InboxSidebarContent />;
   if (kind === "settings") return <SettingsSidebarContent />;
   if (kind === "memo") return <MemoDetailSidebarContent />;
+  if (kind === "whiteboards") return <WhiteboardSidebarSlot />;
   if (kind === "common") return <CommonSidebarContent />;
   return null;
 };
@@ -456,6 +459,7 @@ export const MobileAppHeader = () => {
 
 export const MobileAppSidebar = () => {
   const direction = useDirection();
+  const isWhiteboard = getSidebarRouteKind(useLocation().pathname) === "whiteboards";
   const { mobileOpen, setMobileOpen, completeMobileClose } = useAppSidebar();
   return (
     <Sheet open={mobileOpen} onOpenChange={setMobileOpen} onOpenChangeComplete={completeMobileClose}>
@@ -465,6 +469,7 @@ export const MobileAppSidebar = () => {
       >
         <SheetTitle className="sr-only">Navigation</SheetTitle>
         <AppSidebar />
+        {isWhiteboard && <WhiteboardSidebarToggle desktop={false} inDrawer />}
       </SheetContent>
     </Sheet>
   );

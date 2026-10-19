@@ -29,6 +29,7 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 	require.Positive(t, board.CreatedTs)
 	require.GreaterOrEqual(t, board.UpdatedTs, board.CreatedTs)
 	require.Nil(t, board.ThumbnailAttachmentID)
+	require.Equal(t, "blank", board.BackgroundLayout)
 
 	byID, err := ts.GetWhiteboard(ctx, &store.FindWhiteboard{ID: &board.ID})
 	require.NoError(t, err)
@@ -71,6 +72,16 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 	require.Equal(t, tags, got.Tags)
 	require.JSONEq(t, string(document), string(got.Document))
 	require.Equal(t, &first.ID, got.ThumbnailAttachmentID)
+	for _, layout := range []string{"lines", "engineering", "graph", "isometric", "blank"} {
+		require.NoError(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, BackgroundLayout: &layout}))
+		got, err := ts.GetWhiteboard(ctx, &store.FindWhiteboard{ID: &board.ID})
+		require.NoError(t, err)
+		require.Equal(t, layout, got.BackgroundLayout)
+		require.Equal(t, tags, got.Tags)
+		require.JSONEq(t, string(document), string(got.Document))
+	}
+	invalidLayout := "unsupported"
+	require.Error(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, BackgroundLayout: &invalidLayout}))
 
 	// Replacement only changes the reference; attachment cleanup belongs to the client.
 	require.NoError(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, ThumbnailAttachmentID: &second.ID}))

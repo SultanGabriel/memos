@@ -3517,7 +3517,7 @@ paths:
                     type: string
                 - name: updateMask
                   in: query
-                  description: 'Required. Mutable fields: title, tags, document, thumbnail, state.'
+                  description: 'Required. Mutable fields: title, tags, document, thumbnail, state, background_layout.'
                   schema:
                     type: string
                     format: field-mask
@@ -6234,6 +6234,9 @@ components:
                     type: string
                     description: Optional. NORMAL by default; ARCHIVED boards are excluded from the default list.
                     format: enum
+                backgroundLayout:
+                    type: string
+                    description: 'Optional. Page background: blank (default), lines, engineering, graph, or isometric.'
                 createTime:
                     readOnly: true
                     type: string

@@ -10,12 +10,23 @@ Add upcoming changes under **Unreleased**, then move them into a new version sec
 
 - Whiteboards (WIP): a separate, private tldraw feature with a top-level sidebar entry, searchable card library, tags, sorting, and immediate creation.
 - Whiteboard APIs and persistence for SQLite, MySQL, and PostgreSQL, with creator/admin access and attachment-backed images and previews.
-- Document-only autosave, Ctrl/Cmd+S, unsaved-change protection, independent title/tag updates, and a movable application bar.
+- Document-only autosave, Ctrl/Cmd+S, unsaved-change protection, and independent metadata updates.
 - Client-generated previews with failure-safe replacement and old-thumbnail cleanup; image uploads and preview regeneration are disabled for admins editing another user's board.
+- Per-whiteboard backgrounds persisted across all three databases: Blank, Lines, Engineering Grid, Graph Paper, and Isometric, with world-space patterns and zoom-dependent fading.
+- A separate Writing Pen with local controls for size, smoothing, streamline, thinning, pressure simulation, taper, and caps; each stroke keeps its original rendering settings.
+- Independently movable toolbar and color/style docks with local Top, Bottom, Left, and Right preferences, shared docking on the same edge, and iPad safe-area spacing.
+- Build-time tldraw license configuration through `VITE_TLDRAW_LICENSE_KEY`, with a frontend environment example and setup documentation.
+
+### Changed
+
+- Whiteboard title, tags, save status, background selection, and local tool settings now live in Memos' existing sidebar, leaving more room for the canvas.
+- Whiteboard routes offer a centered sidebar collapse/expand handle, using shared sidebar controls and preserving the mobile navigation drawer.
+- New Whiteboard UI translations are maintained in English and German.
 
 ### Fixed
 
 - Keep the Whiteboard editor/store stable across drawing, save-status updates, and background query changes so new strokes are preserved.
+- Keep Whiteboard application controls above the canvas UI, without rebuilding the editor when backgrounds, pen settings, dock positions, or sidebar visibility change.
 
 ## v0.1.0 — 2026-10-14
 

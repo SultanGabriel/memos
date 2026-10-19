@@ -52,12 +52,13 @@ func TestWhiteboardServiceAuthorization(t *testing.T) {
 				require.Equal(t, board.Name, got.Name)
 			}
 			updated, err := ts.Service.UpdateWhiteboard(actor.ctx, &apipb.UpdateWhiteboardRequest{
-				Whiteboard: &apipb.Whiteboard{Name: board.Name, Title: "Changed"},
-				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+				Whiteboard: &apipb.Whiteboard{Name: board.Name, Title: "Changed", BackgroundLayout: "lines"},
+				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title", "background_layout"}},
 			})
 			require.Equal(t, actor.code, status.Code(err))
 			if actor.code == codes.OK {
 				require.Equal(t, "Changed", updated.Title)
+				require.Equal(t, "lines", updated.BackgroundLayout)
 				require.Equal(t, board.Creator, updated.Creator)
 			}
 			_, err = ts.Service.DeleteWhiteboard(actor.ctx, &apipb.DeleteWhiteboardRequest{Name: board.Name})
@@ -73,6 +74,55 @@ func TestWhiteboardServiceAuthorization(t *testing.T) {
 	}
 	_, err = ts.Service.CreateWhiteboard(ctx, &apipb.CreateWhiteboardRequest{Whiteboard: &apipb.Whiteboard{}})
 	require.Equal(t, codes.Unauthenticated, status.Code(err))
+}
+
+func TestWhiteboardBackgroundMetadata(t *testing.T) {
+	ctx := context.Background()
+	ts := NewTestService(t)
+	t.Cleanup(ts.Cleanup)
+	owner, err := ts.CreateRegularUser(ctx, "background-owner")
+	require.NoError(t, err)
+	userCtx := ts.CreateUserContext(ctx, owner.ID)
+	board, err := ts.Service.CreateWhiteboard(userCtx, &apipb.CreateWhiteboardRequest{Whiteboard: &apipb.Whiteboard{}})
+	require.NoError(t, err)
+	require.Equal(t, "blank", board.BackgroundLayout)
+	for _, layout := range []string{"lines", "engineering", "graph", "isometric", "blank"} {
+		updated, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+			Whiteboard: &apipb.Whiteboard{Name: board.Name, BackgroundLayout: layout, Document: `{"unmasked":true}`},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"background_layout"}},
+		})
+		require.NoError(t, err)
+		require.Equal(t, layout, updated.BackgroundLayout)
+		require.JSONEq(t, board.Document, updated.Document)
+	}
+	for _, layout := range []string{"", "unsupported"} {
+		_, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+			Whiteboard: &apipb.Whiteboard{Name: board.Name, BackgroundLayout: layout},
+			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"background_layout"}},
+		})
+		require.Equal(t, codes.InvalidArgument, status.Code(err))
+	}
+	created, err := ts.Service.CreateWhiteboard(userCtx, &apipb.CreateWhiteboardRequest{
+		Whiteboard: &apipb.Whiteboard{BackgroundLayout: "graph"},
+	})
+	require.NoError(t, err)
+	updated, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+		Whiteboard: &apipb.Whiteboard{Name: created.Name, Title: "Renamed", BackgroundLayout: "lines"},
+		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
+	})
+	require.NoError(t, err)
+	require.Equal(t, "graph", updated.BackgroundLayout)
+	listed, err := ts.Service.ListWhiteboards(userCtx, &apipb.ListWhiteboardsRequest{})
+	require.NoError(t, err)
+	for _, item := range listed.Whiteboards {
+		if item.Name == created.Name {
+			require.Equal(t, "graph", item.BackgroundLayout)
+		}
+	}
+	_, err = ts.Service.CreateWhiteboard(userCtx, &apipb.CreateWhiteboardRequest{
+		Whiteboard: &apipb.Whiteboard{BackgroundLayout: "unsupported"},
+	})
+	require.Equal(t, codes.InvalidArgument, status.Code(err))
 }
 
 func TestWhiteboardServiceCollection(t *testing.T) {

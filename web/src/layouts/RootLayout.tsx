@@ -9,7 +9,9 @@ import AppSidebar, {
   SidebarResizeHandle,
   useSidebarWidth,
 } from "@/components/AppSidebar";
-import { AppSidebarProvider } from "@/contexts/AppSidebarContext";
+import { getSidebarRouteKind } from "@/components/AppSidebar/routes";
+import WhiteboardSidebarToggle from "@/components/Whiteboard/WhiteboardSidebarToggle";
+import { AppSidebarProvider, useAppSidebar } from "@/contexts/AppSidebarContext";
 import { GlobalMemoEditorProvider } from "@/contexts/GlobalMemoEditorContext";
 import { useInstance } from "@/contexts/InstanceContext";
 import { MemoFilterProvider, useMemoFilterContext } from "@/contexts/MemoFilterContext";
@@ -48,6 +50,9 @@ const RootLayoutContent = () => {
   const { profile } = useInstance();
   const { removeFilter } = useMemoFilterContext();
   const { pathname } = location;
+  const { desktopCollapsed } = useAppSidebar();
+  const isWhiteboard = getSidebarRouteKind(pathname) === "whiteboards";
+  const sidebarVisible = md && (!isWhiteboard || !desktopCollapsed);
   // Canvas views fill the viewport and manage their own scrolling.
   const fullBleed =
     resolveCollectionRoute(pathname).pathname.toLowerCase() === ROUTES.MAP || Boolean(matchPath("/whiteboards/:uid", pathname));
@@ -85,7 +90,7 @@ const RootLayoutContent = () => {
       className={cn("w-full bg-background", fullBleed ? "h-dvh overflow-hidden" : "min-h-full")}
       style={{ [SIDEBAR_WIDTH_VAR]: `${sidebarWidth}px` } as CSSProperties}
     >
-      {md && (
+      {sidebarVisible && (
         <div className="fixed inset-y-0 start-0 z-30 w-(--app-sidebar-width) border-e border-border/70">
           <AppSidebar />
           <SidebarResizeHandle
@@ -99,12 +104,17 @@ const RootLayoutContent = () => {
       )}
       <MobileAppSidebar />
       <main
-        className={cn("flex w-full min-w-0 flex-col items-center md:ps-(--app-sidebar-width)", fullBleed ? "h-full min-h-0" : "min-h-full")}
+        className={cn(
+          "flex w-full min-w-0 flex-col items-center",
+          sidebarVisible && "md:ps-(--app-sidebar-width)",
+          fullBleed ? "h-full min-h-0" : "min-h-full",
+        )}
       >
         <MobileAppHeader />
         {profile.demo && <DemoBanner />}
         <Outlet />
       </main>
+      {isWhiteboard && <WhiteboardSidebarToggle desktop={md} />}
       <QuickFindDialog />
     </div>
   );

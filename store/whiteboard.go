@@ -20,6 +20,7 @@ type Whiteboard struct {
 	CreatedTs             int64
 	UpdatedTs             int64
 	Title                 string
+	BackgroundLayout      string
 	Tags                  []string
 	Document              json.RawMessage
 	ThumbnailAttachmentID *int32
@@ -47,6 +48,7 @@ type FindWhiteboard struct {
 type UpdateWhiteboard struct {
 	ID                    int32
 	Title                 *string
+	BackgroundLayout      *string
 	Tags                  *[]string
 	Document              *json.RawMessage
 	ThumbnailAttachmentID *int32
@@ -107,6 +109,16 @@ func ValidateWhiteboardDocument(document json.RawMessage) error {
 	return nil
 }
 
+// ValidWhiteboardBackgroundLayout checks the supported persisted layout names.
+func ValidWhiteboardBackgroundLayout(layout string) bool {
+	switch layout {
+	case "blank", "lines", "engineering", "graph", "isometric":
+		return true
+	default:
+		return false
+	}
+}
+
 // CreateWhiteboard validates metadata and persists a new document.
 func (s *Store) CreateWhiteboard(ctx context.Context, create *Whiteboard) (*Whiteboard, error) {
 	if create == nil || !identifier.UIDMatcher.MatchString(create.UID) || create.CreatorID <= 0 {
@@ -117,6 +129,12 @@ func (s *Store) CreateWhiteboard(ctx context.Context, create *Whiteboard) (*Whit
 	}
 	if create.RowStatus == "" {
 		create.RowStatus = Normal
+	}
+	if create.BackgroundLayout == "" {
+		create.BackgroundLayout = "blank"
+	}
+	if !ValidWhiteboardBackgroundLayout(create.BackgroundLayout) {
+		return nil, errors.New("invalid whiteboard background layout")
 	}
 	if create.RowStatus != Normal && create.RowStatus != Archived {
 		return nil, errors.New("invalid whiteboard state")
@@ -155,6 +173,9 @@ func (s *Store) GetWhiteboard(ctx context.Context, find *FindWhiteboard) (*White
 func (s *Store) UpdateWhiteboard(ctx context.Context, update *UpdateWhiteboard) error {
 	if update == nil || update.ID <= 0 {
 		return errors.New("whiteboard ID required")
+	}
+	if update.BackgroundLayout != nil && !ValidWhiteboardBackgroundLayout(*update.BackgroundLayout) {
+		return errors.New("invalid whiteboard background layout")
 	}
 	if update.RowStatus != nil && *update.RowStatus != Normal && *update.RowStatus != Archived {
 		return errors.New("invalid whiteboard state")

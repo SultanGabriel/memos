@@ -1,5 +1,6 @@
 -- whiteboard
 CREATE TABLE whiteboard (
+  background_layout TEXT NOT NULL DEFAULT 'blank',
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   uid TEXT NOT NULL UNIQUE,
   creator_id INTEGER NOT NULL,

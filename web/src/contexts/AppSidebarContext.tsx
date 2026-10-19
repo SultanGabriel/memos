@@ -21,6 +21,8 @@ export interface MemoDetailSidebarDescriptor {
 }
 
 interface AppSidebarContextValue {
+  whiteboardSidebarTargets: HTMLElement[];
+  registerWhiteboardSidebarTarget: (target: HTMLElement) => () => void;
   attachmentSection: AttachmentSection;
   setAttachmentSection: (section: AttachmentSection) => void;
   inboxFilter: InboxFilter;
@@ -29,6 +31,8 @@ interface AppSidebarContextValue {
   setMemoDetail: (descriptor?: MemoDetailSidebarDescriptor) => void;
   mobileOpen: boolean;
   setMobileOpen: (open: boolean) => void;
+  desktopCollapsed: boolean;
+  setDesktopCollapsed: (collapsed: boolean) => void;
   closeMobileThen: (action: () => void) => void;
   completeMobileClose: (open: boolean) => void;
   quickFindOpen: boolean;
@@ -39,10 +43,16 @@ const AppSidebarContext = createContext<AppSidebarContextValue | null>(null);
 
 export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
   const location = useLocation();
+  const [whiteboardSidebarTargets, setWhiteboardSidebarTargets] = useState<HTMLElement[]>([]);
+  const registerWhiteboardSidebarTarget = useCallback((target: HTMLElement) => {
+    setWhiteboardSidebarTargets((targets) => [...targets, target]);
+    return () => setWhiteboardSidebarTargets((targets) => targets.filter((item) => item !== target));
+  }, []);
   const [attachmentSection, setAttachmentSection] = useState<AttachmentSection>("all");
   const [inboxFilter, setInboxFilter] = useState<InboxFilter>("all");
   const [memoDetail, setMemoDetailState] = useState<MemoDetailSidebarDescriptor>();
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [desktopCollapsed, setDesktopCollapsed] = useState(false);
   const pendingMobileCloseActionRef = useRef<(() => void) | undefined>(undefined);
   const scheduledMobileCloseActionFrameRef = useRef<number | undefined>(undefined);
   const [quickFindOpen, setQuickFindOpen] = useState(false);
@@ -99,6 +109,8 @@ export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
 
   const value = useMemo(
     () => ({
+      whiteboardSidebarTargets,
+      registerWhiteboardSidebarTarget,
       attachmentSection,
       setAttachmentSection,
       inboxFilter,
@@ -107,12 +119,17 @@ export const AppSidebarProvider = ({ children }: { children: ReactNode }) => {
       setMemoDetail,
       mobileOpen,
       setMobileOpen,
+      desktopCollapsed,
+      setDesktopCollapsed,
       closeMobileThen,
       completeMobileClose,
       quickFindOpen,
       setQuickFindOpen,
     }),
-    [attachmentSection, inboxFilter, memoDetail, setMemoDetail, mobileOpen, closeMobileThen, completeMobileClose, quickFindOpen],
+    [
+      attachmentSection, inboxFilter, memoDetail, setMemoDetail, mobileOpen, closeMobileThen, completeMobileClose, quickFindOpen,
+      whiteboardSidebarTargets, registerWhiteboardSidebarTarget, desktopCollapsed,
+    ],
   );
 
   return <AppSidebarContext.Provider value={value}>{children}</AppSidebarContext.Provider>;

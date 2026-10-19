@@ -27,6 +27,14 @@ describe("whiteboard query mutations", () => {
       updateMask: { paths: ["title"] },
     });
     expect(client.getQueryData(whiteboardKeys.detail(viewer, name))).toEqual(current);
+    await act(async () => {
+      await result.current.mutateAsync({ whiteboard: { backgroundLayout: "isometric" }, updateMask: ["background_layout"] });
+    });
+    expect(api.updateWhiteboard).toHaveBeenLastCalledWith({
+      whiteboard: expect.objectContaining({ name, backgroundLayout: "isometric" }),
+      updateMask: { paths: ["background_layout"] },
+    });
+    expect(client.getQueryData(whiteboardKeys.detail(viewer, name))).toEqual(current);
     expect(client.getQueryState(whiteboardKeys.detail(viewer, name))?.isInvalidated).toBe(true);
     expect(whiteboardKeys.detail("users/other", name)).not.toEqual(whiteboardKeys.detail(viewer, name));
     client.clear();

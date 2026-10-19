@@ -1,13 +1,17 @@
-import { ArrowLeftIcon, PanelTopIcon } from "lucide-react";
+import { ArrowLeftIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
+import { createPortal } from "react-dom";
 import { Link, useBlocker } from "react-router-dom";
 import { createTLStore, type Editor, Tldraw } from "tldraw";
 import "tldraw/tldraw.css";
 import ConfirmDialog from "@/components/ConfirmDialog";
+import SidebarSection from "@/components/AppSidebar/SidebarSection";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
 import { useUpdateWhiteboard } from "@/hooks/useWhiteboardQueries";
@@ -17,22 +21,21 @@ import type { Whiteboard } from "@/types/proto/api/whiteboard_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { isDarkTheme } from "@/utils/theme";
 import { createWhiteboardAssets, WHITEBOARD_IMAGE_TYPES } from "./assets";
+import { BACKGROUND_LAYOUTS, backgroundLayout } from "./background-layout";
 import { loadWhiteboardDocument, serializeWhiteboardDocument } from "./persistence";
 import { createWhiteboardThumbnails } from "./thumbnail";
+import { WHITEBOARD_COMPONENTS, WhiteboardBackgroundContext } from "./WhiteboardBackground";
+import { TOOL_DOCK_POSITIONS, useWhiteboardToolDock } from "./tool-dock-preferences";
+import { WhiteboardToolDockContext } from "./WhiteboardToolDock";
+import WritingPenSettings from "./writingPen/settings";
+import { WRITING_PEN_SHAPE_UTILS } from "./writingPen/shape";
+import { useWritingPenPreferences } from "./writingPen/storage";
+import { attachWritingPenProfile, WRITING_PEN_TOOLS } from "./writingPen/tool";
 import "./whiteboard.css";
 
-type BarPlacement = "top" | "bottom" | "hidden";
 // tldraw configures asset utilities by array identity. Inline arrays recreate the editor.
 const NO_MEDIA_TYPES: readonly string[] = [];
-const placementKey = "memos:whiteboard-bar";
-const initialPlacement = (): BarPlacement => {
-  try {
-    const value = localStorage.getItem(placementKey);
-    return value === "bottom" || value === "hidden" ? value : "top";
-  } catch {
-    return "top";
-  }
-};
+const licenseKey = import.meta.env.VITE_TLDRAW_LICENSE_KEY || undefined;
 
 export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboard }) {
   // This session is initialized once; metadata mutation responses never reload the drawing.
@@ -41,14 +44,19 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
   const viewer = user?.name ?? "";
   const isOwner = viewer === board.creator;
   const t = useTranslate();
+  const { whiteboardSidebarTargets, setMobileOpen } = useAppSidebar();
   const messages = useRef(t);
   messages.current = t;
   const { mutateAsync: patch } = useUpdateWhiteboard(viewer, board.name);
   const dark = isDarkTheme(useResolvedTheme());
-  const [placement, setPlacement] = useState<BarPlacement>(initialPlacement);
+  const dock = useWhiteboardToolDock();
+  const dockPositions = useMemo(() => ({ toolbar: dock.position, styles: dock.stylePosition }), [dock.position, dock.stylePosition]);
   const [pendingUploads, setPendingUploads] = useState(0);
   const pending = useRef(0);
   const editorRef = useRef<Editor | null>(null);
+  const [liveEditor, setLiveEditor] = useState<Editor | null>(null);
+  const writingPen = useWritingPenPreferences();
+  const { getProfile } = writingPen;
   const colorScheme = useRef<"dark" | "light">(dark ? "dark" : "light");
   colorScheme.current = dark ? "dark" : "light";
   const thumbnails = useRef<ReturnType<typeof createWhiteboardThumbnails> | null>(null);
@@ -81,6 +89,7 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
   const session = useWhiteboardSession({
     initialTitle: board.title,
     initialTags: board.tags,
+    initialBackground: backgroundLayout(board.backgroundLayout),
     patch,
     getDocument: async (editor) => {
       await assets.whenIdle();
@@ -113,6 +122,8 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
   const onMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
+      setLiveEditor(editor);
+      const detachWritingPen = attachWritingPenProfile(editor, getProfile);
       editor.user.updateUserPreferences({ colorScheme: colorScheme.current });
       // Keep stock file/paste/drop and pen handling. URL embeds are outside v1.
       editor.registerExternalContentHandler("url", async () => {
@@ -131,84 +142,130 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
       // A prior session may have closed before its preview debounce fired.
       if (isOwner) previews.markSaved();
       return () => {
+        detachWritingPen();
         stopDocument();
         previews.dispose();
         thumbnails.current = null;
         if (editorRef.current === editor) editorRef.current = null;
       };
     },
-    [board, attachDocument, isDocumentClean, isOwner, patch],
+    [board, attachDocument, isDocumentClean, isOwner, patch, getProfile],
   );
-  const moveBar = (value: string) => {
-    if (value !== "top" && value !== "bottom" && value !== "hidden") return;
-    setPlacement(value);
-    try {
-      localStorage.setItem(placementKey, value);
-    } catch {
-      /* Preference is optional. */
-    }
-  };
   const statusLabels = {
     saved: t("whiteboards.saved"),
     unsaved: t("whiteboards.unsaved"),
     saving: t("whiteboards.saving"),
     error: t("whiteboards.save-error"),
   };
-  const bar = (
-    <div className="whiteboard-bar flex shrink-0 flex-wrap items-center gap-2 border-border bg-background px-3 py-2 text-sm">
-      <Link to="/whiteboards" className="inline-flex items-center gap-1" aria-label={t("whiteboards.back")}>
-        <ArrowLeftIcon className="size-4" />
-        <span className="hidden sm:inline">{t("whiteboards.title")}</span>
-      </Link>
-      <Input
-        aria-label={t("whiteboards.board-title")}
-        value={session.title}
-        onChange={(event) => session.setTitle(event.target.value)}
-        className="w-40 flex-1"
-      />
-      <Input
-        aria-label={t("whiteboards.tags")}
-        placeholder={t("whiteboards.tags-hint")}
-        value={session.tags}
-        onChange={(event) => session.setTags(event.target.value)}
-        className="w-36 flex-1"
-      />
-      <Button
-        variant="ghost"
-        size="sm"
-        onClick={() => {
-          void saveNow();
-        }}
-        aria-live="polite"
-      >
-        {pendingUploads ? t("whiteboards.uploading") : statusLabels[session.status]}
-      </Button>
-      <Select value={placement} onValueChange={moveBar}>
-        <SelectTrigger aria-label={t("whiteboards.bar-position")}>
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          <SelectItem value="top">{t("whiteboards.bar-top")}</SelectItem>
-          <SelectItem value="bottom">{t("whiteboards.bar-bottom")}</SelectItem>
-          <SelectItem value="hidden">{t("whiteboards.bar-hidden")}</SelectItem>
-        </SelectContent>
-      </Select>
-      {!isOwner && <p className="w-full text-xs text-muted-foreground">{t("whiteboards.foreign-board")}</p>}
-    </div>
+  const sidebarControls = (
+    <SidebarSection label={t("whiteboards.title")}>
+      <div className="whiteboard-ui flex flex-col gap-3 py-2 text-sm">
+        <Link
+          to="/whiteboards"
+          onClick={() => setMobileOpen(false)}
+          className="inline-flex items-center gap-1"
+          aria-label={t("whiteboards.back")}
+        >
+          <ArrowLeftIcon className="size-4" />
+          <span>{t("whiteboards.back")}</span>
+        </Link>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">{t("whiteboards.board-title")}</span>
+          <Input
+            aria-label={t("whiteboards.board-title")}
+            value={session.title}
+            onChange={(event) => session.setTitle(event.target.value)}
+          />
+        </label>
+        <label className="flex flex-col gap-1">
+          <span className="text-xs text-muted-foreground">{t("whiteboards.tags")}</span>
+          <Input
+            aria-label={t("whiteboards.tags")}
+            placeholder={t("whiteboards.tags-hint")}
+            value={session.tags}
+            onChange={(event) => session.setTags(event.target.value)}
+          />
+        </label>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => {
+            void saveNow();
+          }}
+          aria-live="polite"
+        >
+          {pendingUploads ? t("whiteboards.uploading") : statusLabels[session.status]}
+        </Button>
+        <fieldset className="flex flex-col gap-2">
+          <legend className="mb-2 text-xs text-muted-foreground">{t("whiteboards.background")}</legend>
+          <RadioGroup
+            aria-label={t("whiteboards.background")}
+            value={session.background}
+            onValueChange={(value) => session.setBackground(backgroundLayout(String(value)))}
+          >
+            {BACKGROUND_LAYOUTS.map((layout) => (
+              <label key={layout} className="flex cursor-pointer items-center gap-2 py-1">
+                <RadioGroupItem value={layout} />
+                <span>{t(`whiteboards.background-${layout}`)}</span>
+              </label>
+            ))}
+          </RadioGroup>
+        </fieldset>
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">{t("whiteboards.toolbar-position")}</span>
+          <Select value={dock.position} onValueChange={dock.setPosition}>
+            <SelectTrigger aria-label={t("whiteboards.toolbar-position")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TOOL_DOCK_POSITIONS.map((position) => (
+                <SelectItem key={position} value={position}>
+                  {t(`whiteboards.toolbar-${position}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <div className="flex flex-col gap-2">
+          <span className="text-xs text-muted-foreground">{t("whiteboards.style-panel-position")}</span>
+          <Select value={dock.stylePosition} onValueChange={dock.setStylePosition}>
+            <SelectTrigger aria-label={t("whiteboards.style-panel-position")}>
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {TOOL_DOCK_POSITIONS.map((position) => (
+                <SelectItem key={position} value={position}>
+                  {t(`whiteboards.toolbar-${position}`)}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <WritingPenSettings editor={liveEditor} preferences={writingPen} />
+        {!isOwner && <p className="w-full text-xs text-muted-foreground">{t("whiteboards.foreign-board")}</p>}
+      </div>
+    </SidebarSection>
   );
   return (
     <div className={cn("whiteboard-ui relative flex min-h-0 w-full flex-1 flex-col overflow-hidden", dark && "whiteboard-dark")}>
-      {placement === "top" && bar}
+      {whiteboardSidebarTargets.map((target) => createPortal(sidebarControls, target))}
       <div className="relative min-h-0 flex-1">
-        <div className="absolute inset-0">
+        <div className="absolute inset-0 isolate">
           {canvas.store && (
-            <Tldraw
-              store={canvas.store}
-              onMount={onMount}
-              licenseKey={import.meta.env.VITE_TLDRAW_LICENSE_KEY || undefined}
-              acceptedImageMimeTypes={isOwner ? WHITEBOARD_IMAGE_TYPES : NO_MEDIA_TYPES}
-              acceptedVideoMimeTypes={NO_MEDIA_TYPES}
-            />
+            <WhiteboardBackgroundContext value={session.background}>
+              <WhiteboardToolDockContext value={dockPositions}>
+                <Tldraw
+                  store={canvas.store}
+                  components={WHITEBOARD_COMPONENTS}
+                  shapeUtils={WRITING_PEN_SHAPE_UTILS}
+                  tools={WRITING_PEN_TOOLS}
+                  onMount={onMount}
+                  licenseKey={licenseKey}
+                  acceptedImageMimeTypes={isOwner ? WHITEBOARD_IMAGE_TYPES : NO_MEDIA_TYPES}
+                  acceptedVideoMimeTypes={NO_MEDIA_TYPES}
+                />
+              </WhiteboardToolDockContext>
+            </WhiteboardBackgroundContext>
           )}
         </div>
         {canvas.loadError && (
@@ -219,19 +276,7 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
             </Link>
           </div>
         )}
-        {placement === "hidden" && (
-          <Button
-            className="absolute end-3 top-16 z-40"
-            variant="outline"
-            size="icon"
-            onClick={() => moveBar("top")}
-            aria-label={t("whiteboards.show-bar")}
-          >
-            <PanelTopIcon className="size-4" />
-          </Button>
-        )}
       </div>
-      {placement === "bottom" && bar}
       <ConfirmDialog
         open={blocker.state === "blocked"}
         onOpenChange={(open) => {

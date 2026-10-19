@@ -128,6 +128,9 @@ func (s *APIService) CreateWhiteboard(ctx context.Context, request *apipb.Create
 		return nil, status.Errorf(codes.InvalidArgument, "whiteboard required")
 	}
 	input := request.Whiteboard
+	if input.BackgroundLayout != "" && !store.ValidWhiteboardBackgroundLayout(input.BackgroundLayout) {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid background layout")
+	}
 	if input.Name != "" || input.Creator != "" || input.CreateTime != nil || input.UpdateTime != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "name and output fields must be unset")
 	}
@@ -159,6 +162,7 @@ func (s *APIService) CreateWhiteboard(ctx context.Context, request *apipb.Create
 	board, err := s.Store.CreateWhiteboard(ctx, &store.Whiteboard{
 		UID: uid, CreatorID: user.ID, Title: input.Title, Tags: input.Tags, Document: document,
 		ThumbnailAttachmentID: thumbnail, RowStatus: store.Normal,
+		BackgroundLayout: input.BackgroundLayout,
 	})
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to create whiteboard: %v", err)
@@ -183,6 +187,11 @@ func (s *APIService) UpdateWhiteboard(ctx context.Context, request *apipb.Update
 	update := &store.UpdateWhiteboard{ID: board.ID}
 	for _, path := range request.UpdateMask.Paths {
 		switch path {
+		case "background_layout":
+			if !store.ValidWhiteboardBackgroundLayout(input.BackgroundLayout) {
+				return nil, status.Errorf(codes.InvalidArgument, "invalid background layout")
+			}
+			update.BackgroundLayout = &input.BackgroundLayout
 		case "title":
 			if strings.TrimSpace(input.Title) == "" {
 				return nil, status.Errorf(codes.InvalidArgument, "title must not be blank")

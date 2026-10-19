@@ -66,6 +66,8 @@ message Whiteboard {
   string thumbnail = 6 [(google.api.field_behavior) = OPTIONAL];
   // Optional. NORMAL by default; ARCHIVED boards are excluded from the default list.
   State state = 7 [(google.api.field_behavior) = OPTIONAL];
+  // Optional. Page background: blank (default), lines, engineering, graph, or isometric.
+  string background_layout = 10 [(google.api.field_behavior) = OPTIONAL];
   // Output only. Creation time.
   google.protobuf.Timestamp create_time = 8 [(google.api.field_behavior) = OUTPUT_ONLY];
   // Output only. Last metadata or document update time.
@@ -108,7 +110,7 @@ message CreateWhiteboardRequest {
 message UpdateWhiteboardRequest {
   // Required. Board name and changed fields.
   Whiteboard whiteboard = 1 [(google.api.field_behavior) = REQUIRED];
-  // Required. Mutable fields: title, tags, document, thumbnail, state.
+  // Required. Mutable fields: title, tags, document, thumbnail, state, background_layout.
   google.protobuf.FieldMask update_mask = 2 [(google.api.field_behavior) = REQUIRED];
 }
 // DeleteWhiteboardRequest identifies a board to permanently delete.

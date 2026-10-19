@@ -110,4 +110,23 @@ describe("RootLayout global editor shell", () => {
 
     expect(screen.getByTestId("route")).toHaveTextContent("/auth");
   });
+
+  it("collapses the desktop sidebar on Whiteboards without replacing the route content", () => {
+    render(
+      <MemoryRouter initialEntries={["/whiteboards/one"]}>
+        <Routes>
+          <Route element={<RootLayout />}>
+            <Route path="whiteboards/:uid" element={<div data-testid="board-route">Board</div>} />
+          </Route>
+        </Routes>
+      </MemoryRouter>,
+    );
+    const route = screen.getByTestId("board-route");
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.sidebar-collapse" }));
+    expect(screen.queryByTestId("desktop-sidebar")).not.toBeInTheDocument();
+    expect(screen.getByTestId("board-route")).toBe(route);
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.sidebar-expand" }));
+    expect(screen.getByTestId("desktop-sidebar")).toBeInTheDocument();
+    expect(screen.getByTestId("board-route")).toBe(route);
+  });
 });

@@ -1,32 +1,37 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { Editor } from "tldraw";
+import type { BackgroundLayout } from "@/components/Whiteboard/background-layout";
 import { createWhiteboardAutosave, type SaveStatus, type WhiteboardAutosaveController } from "@/lib/whiteboard-autosave";
 import { parseWhiteboardTags } from "@/lib/whiteboard-tags";
 import type { WhiteboardPatch } from "./useWhiteboardQueries";
 
-/** Three independent autosaves share the board's mutation queue. Metadata never constructs a document snapshot. */
+/** Independent field saves share the board's mutation queue. Metadata never constructs a document snapshot. */
 export function useWhiteboardSession({
   initialTitle,
   initialTags,
+  initialBackground,
   patch,
   onDocumentSaved,
   getDocument,
 }: {
   initialTitle: string;
   initialTags: string[];
+  initialBackground: BackgroundLayout;
   patch: (value: WhiteboardPatch) => Promise<unknown>;
   onDocumentSaved: () => void;
   getDocument: (editor: Editor) => Promise<string>;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [tags, setTags] = useState(initialTags.join(", "));
-  const values = useRef({ title, tags });
+  const [background, setBackground] = useState(initialBackground);
+  const values = useRef({ title, tags, background });
   const callbacks = useRef({ patch, onDocumentSaved, getDocument });
   callbacks.current = { patch, onDocumentSaved, getDocument };
   const controllers = useRef<{
     title?: WhiteboardAutosaveController;
     tags?: WhiteboardAutosaveController;
     document?: WhiteboardAutosaveController;
+    background?: WhiteboardAutosaveController;
   }>({});
   const [, render] = useState(0);
   const refresh = useCallback(() => render((value) => value + 1), []);
@@ -48,11 +53,22 @@ export function useWhiteboardSession({
       debounceMs: 700,
     });
     controllers.current.title = titleSave;
+    const backgroundSave = createWhiteboardAutosave({
+      getSnapshot: () => values.current.background,
+      save: async (backgroundLayout) => {
+        await callbacks.current.patch({ whiteboard: { backgroundLayout }, updateMask: ["background_layout"] });
+      },
+      debounceMs: 0,
+    });
+    controllers.current.background = backgroundSave;
+    const offBackground = backgroundSave.subscribe(refresh);
     controllers.current.tags = tagSave;
     const offTitle = titleSave.subscribe(refresh);
     const offTags = tagSave.subscribe(refresh);
     return () => {
       offTitle();
+      offBackground();
+      backgroundSave.dispose();
       offTags();
       titleSave.dispose();
       tagSave.dispose();
@@ -97,11 +113,17 @@ export function useWhiteboardSession({
   return {
     title,
     tags,
+    background,
     status,
     isDirty,
     isDocumentClean,
     saveNow,
     attachDocument,
+    setBackground(value: BackgroundLayout) {
+      values.current.background = value;
+      setBackground(value);
+      controllers.current.background?.markChanged();
+    },
     setTitle(value: string) {
       values.current.title = value;
       setTitle(value);

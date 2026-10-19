@@ -5,6 +5,8 @@ import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { Editor, TldrawProps } from "tldraw";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WhiteboardDetail from "@/pages/WhiteboardDetail";
+import WhiteboardSidebarSlot from "@/components/Whiteboard/WhiteboardSidebarSlot";
+import { AppSidebarProvider } from "@/contexts/AppSidebarContext";
 import { type Whiteboard, WhiteboardSchema } from "@/types/proto/api/whiteboard_service_pb";
 
 interface TestStore {
@@ -23,16 +25,20 @@ const state = vi.hoisted(() => ({
   mounts: 0,
   unmounts: 0,
   theme: "light" as "light" | "dark",
+  sidebarOpen: true,
   query: {} as { data?: Whiteboard; isPending: boolean; isError: boolean; isFetchedAfterMount: boolean },
 }));
 
 // Substitute only the canvas boundary. Exercise our real route, session, persistence, and autosave code.
 // Model the installed tldraw version's documented identity-sensitive initialization inputs.
 vi.mock("tldraw", () => ({
+  DrawShapeTool: class {},
+  DrawShapeUtil: class {},
+  useValue: (_name: string, getValue: () => unknown) => getValue(),
   createTLStore: state.createStore,
   loadSnapshot: state.loadSnapshot,
   getSnapshot: state.getSnapshot,
-  Tldraw: ({ store, onMount, acceptedImageMimeTypes, acceptedVideoMimeTypes, colorScheme }: TldrawProps) => {
+  Tldraw: ({ store, onMount, acceptedImageMimeTypes, acceptedVideoMimeTypes, colorScheme, components, shapeUtils, tools }: TldrawProps) => {
     const mount = useRef(onMount);
     mount.current = onMount;
     useEffect(() => {
@@ -40,12 +46,14 @@ vi.mock("tldraw", () => ({
       const editor = {
         store,
         registerExternalContentHandler: vi.fn(),
+        getCurrentToolId: vi.fn(() => "select"),
+        setCurrentTool: vi.fn(),
         user: { updateUserPreferences: vi.fn() },
       } as unknown as Editor;
       state.editor = editor;
       const dispose = mount.current?.(editor);
       return () => { state.unmounts++; dispose?.(); };
-    }, [store, acceptedImageMimeTypes, acceptedVideoMimeTypes, colorScheme]);
+    }, [store, acceptedImageMimeTypes, acceptedVideoMimeTypes, colorScheme, components, shapeUtils, tools]);
     return <div data-testid="whiteboard-canvas" />;
   },
 }));
@@ -71,7 +79,10 @@ vi.mock("react-router-dom", async (importOriginal) => ({
 
 const tree = () => (
   <MemoryRouter initialEntries={["/whiteboards/one"]}>
-    <Routes><Route path="/whiteboards/:uid" element={<WhiteboardDetail />} /></Routes>
+    <AppSidebarProvider>
+      {state.sidebarOpen && <WhiteboardSidebarSlot />}
+      <Routes><Route path="/whiteboards/:uid" element={<WhiteboardDetail />} /></Routes>
+    </AppSidebarProvider>
   </MemoryRouter>
 );
 
@@ -82,6 +93,10 @@ beforeEach(() => {
   state.mounts = 0;
   state.unmounts = 0;
   state.theme = "light";
+  state.sidebarOpen = true;
+  localStorage.removeItem("memos-whiteboard-writing-pen");
+  localStorage.removeItem("memos-whiteboard-toolbar-position");
+  localStorage.removeItem("memos-whiteboard-style-panel-position");
   state.query = {
     data: create(WhiteboardSchema, { name: "whiteboards/one", creator: "users/owner", title: "One", document: "{}" }),
     isPending: false, isError: false, isFetchedAfterMount: true,
@@ -150,6 +165,40 @@ describe("whiteboard editor lifecycle", () => {
     await act(async () => { finishSave(); });
     expect(screen.getByText("whiteboards.saved")).toBeInTheDocument();
     expect(screen.getByLabelText("whiteboards.board-title")).toHaveValue("Renamed");
+    const documentSaves = state.patch.mock.calls.filter(([request]) => request.updateMask.includes("document")).length;
+    expect(screen.getByRole("radiogroup", { name: "whiteboards.background" })).toBeInTheDocument();
+    expect(screen.getByRole("radio", { name: "whiteboards.background-blank" })).toBeChecked();
+    fireEvent.click(screen.getByRole("radio", { name: "whiteboards.background-isometric" }));
+    expect(screen.getByRole("radio", { name: "whiteboards.background-isometric" })).toBeChecked();
+    await act(async () => vi.advanceTimersByTimeAsync(1));
+    expect(state.patch).toHaveBeenLastCalledWith({
+      whiteboard: { backgroundLayout: "isometric" }, updateMask: ["background_layout"],
+    });
+    expect(state.patch.mock.calls.filter(([request]) => request.updateMask.includes("document"))).toHaveLength(documentSaves);
+    const settingsPanel = screen.getByText("whiteboards.writing-pen.settings").closest("details");
+    settingsPanel?.setAttribute("open", "");
+    fireEvent.change(screen.getByRole("slider", { name: "whiteboards.writing-pen.smoothing" }), { target: { value: "0.15" } });
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.writing-pen.title" }));
+    expect(editor?.setCurrentTool).toHaveBeenCalledWith("writing-pen");
+    expect(screen.getByText("whiteboards.saved")).toBeInTheDocument();
+    expect(state.patch.mock.calls.filter(([request]) => request.updateMask.includes("document"))).toHaveLength(documentSaves);
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.writing-pen.reset" }));
+    expect(screen.getByRole("slider", { name: "whiteboards.writing-pen.smoothing" })).toHaveValue("0.25");
+    // Dock preferences must not dirty the document or change editor configuration identity.
+    for (const label of ["whiteboards.toolbar-position", "whiteboards.style-panel-position"]) {
+      fireEvent.click(screen.getByLabelText(label));
+      fireEvent.click(screen.getByRole("option", { name: "whiteboards.toolbar-left" }));
+    }
+    expect(state.patch.mock.calls.filter(([request]) => request.updateMask.includes("document"))).toHaveLength(documentSaves);
+    // Closing/reopening the mobile sidebar removes controls, never the live canvas.
+    state.sidebarOpen = false;
+    view.rerender(tree());
+    expect(screen.queryByLabelText("whiteboards.board-title")).not.toBeInTheDocument();
+    expect(screen.getByTestId("whiteboard-canvas")).toBe(canvas);
+    state.sidebarOpen = true;
+    view.rerender(tree());
+    expect(screen.getByLabelText("whiteboards.board-title")).toHaveValue("Renamed");
+    expect(screen.getByRole("radio", { name: "whiteboards.background-isometric" })).toBeChecked();
     expect(state.editor).toBe(editor);
     expect(store.document).toBe(stroke);
     expect(state.createStore).toHaveBeenCalledTimes(1);

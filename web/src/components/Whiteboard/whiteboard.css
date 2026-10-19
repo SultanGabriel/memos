@@ -3,6 +3,10 @@
   --whiteboard-accent-soft: #9c5d6518;
 }
 
+.whiteboard-background {
+  color: var(--tl-color-text, #52525b);
+}
+
 .whiteboard-dark,
 .dark .whiteboard-ui {
   --whiteboard-accent: #d59aa2;
@@ -19,11 +23,6 @@
   color: white;
 }
 
-.whiteboard-ui .whiteboard-bar {
-  border-block: 1px solid var(--border);
-  box-shadow: inset 3px 0 var(--whiteboard-accent);
-}
-
 .whiteboard-ui .whiteboard-card:hover {
   border-color: var(--whiteboard-accent);
 }
@@ -31,4 +30,81 @@
 .whiteboard-ui input:focus-visible {
   outline: 2px solid var(--whiteboard-accent);
   outline-offset: 2px;
+}
+
+/* The positioning region passes input through. Only visible controls handle events. */
+.whiteboard-tool-dock {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.whiteboard-tool-dock__content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  max-width: 100%;
+  min-height: 0;
+  pointer-events: none;
+}
+
+.whiteboard-tool-dock__content > :not(.tlui-main-toolbar) {
+  flex: none;
+  pointer-events: auto;
+}
+
+.whiteboard-tool-dock .tlui-style-panel__wrapper,
+.whiteboard-tool-dock .tlui-style-panel__wrapper:only-child {
+  margin: 0;
+}
+
+/* DefaultToolbar supplies stock controls/overflow; this container owns positioning. */
+.whiteboard-tool-dock[data-position] .tlui-main-toolbar {
+  position: static;
+  inset: auto;
+  padding: 0;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  max-width: 100%;
+  pointer-events: none;
+}
+
+.whiteboard-tool-dock[data-position="top"],
+.whiteboard-tool-dock[data-position="bottom"] {
+  left: max(36px, calc(env(safe-area-inset-left, 0px) + 8px));
+  right: max(12px, calc(env(safe-area-inset-right, 0px) + 8px));
+}
+
+.whiteboard-tool-dock[data-position="top"] {
+  top: calc(56px + env(safe-area-inset-top, 0px));
+}
+
+.whiteboard-tool-dock[data-position="bottom"] {
+  bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
+
+.whiteboard-tool-dock[data-position="left"],
+.whiteboard-tool-dock[data-position="right"] {
+  top: calc(72px + env(safe-area-inset-top, 0px));
+  bottom: calc(96px + env(safe-area-inset-bottom, 0px));
+  max-width: calc(100% - 48px);
+}
+
+.whiteboard-tool-dock[data-position="left"] {
+  left: max(36px, calc(env(safe-area-inset-left, 0px) + 8px));
+}
+
+.whiteboard-tool-dock[data-position="right"] {
+  right: max(12px, calc(env(safe-area-inset-right, 0px) + 8px));
+}
+
+.whiteboard-tool-dock[data-position="left"] .whiteboard-tool-dock__content,
+.whiteboard-tool-dock[data-position="right"] .whiteboard-tool-dock__content {
+  flex-direction: column;
+  height: 100%;
 }

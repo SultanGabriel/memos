@@ -44,6 +44,8 @@ type Whiteboard struct {
 	Thumbnail string `protobuf:"bytes,6,opt,name=thumbnail,proto3" json:"thumbnail,omitempty"`
 	// Optional. NORMAL by default; ARCHIVED boards are excluded from the default list.
 	State State `protobuf:"varint,7,opt,name=state,proto3,enum=memos.api.State" json:"state,omitempty"`
+	// Optional. Page background: blank (default), lines, engineering, graph, or isometric.
+	BackgroundLayout string `protobuf:"bytes,10,opt,name=background_layout,json=backgroundLayout,proto3" json:"background_layout,omitempty"`
 	// Output only. Creation time.
 	CreateTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=create_time,json=createTime,proto3" json:"create_time,omitempty"`
 	// Output only. Last metadata or document update time.
@@ -129,6 +131,13 @@ func (x *Whiteboard) GetState() State {
 		return x.State
 	}
 	return State_STATE_UNSPECIFIED
+}
+
+func (x *Whiteboard) GetBackgroundLayout() string {
+	if x != nil {
+		return x.BackgroundLayout
+	}
+	return ""
 }
 
 func (x *Whiteboard) GetCreateTime() *timestamppb.Timestamp {
@@ -388,7 +397,7 @@ type UpdateWhiteboardRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Required. Board name and changed fields.
 	Whiteboard *Whiteboard `protobuf:"bytes,1,opt,name=whiteboard,proto3" json:"whiteboard,omitempty"`
-	// Required. Mutable fields: title, tags, document, thumbnail, state.
+	// Required. Mutable fields: title, tags, document, thumbnail, state, background_layout.
 	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -488,7 +497,7 @@ var File_api_whiteboard_service_proto protoreflect.FileDescriptor
 
 const file_api_whiteboard_service_proto_rawDesc = "" +
 	"\n" +
-	"\x1capi/whiteboard_service.proto\x12\tmemos.api\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xbb\x03\n" +
+	"\x1capi/whiteboard_service.proto\x12\tmemos.api\x1a\x10api/common.proto\x1a\x1cgoogle/api/annotations.proto\x1a\x17google/api/client.proto\x1a\x1fgoogle/api/field_behavior.proto\x1a\x19google/api/resource.proto\x1a\x1bgoogle/protobuf/empty.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xed\x03\n" +
 	"\n" +
 	"Whiteboard\x12\x17\n" +
 	"\x04name\x18\x01 \x01(\tB\x03\xe0A\bR\x04name\x12\x1d\n" +
@@ -497,7 +506,9 @@ const file_api_whiteboard_service_proto_rawDesc = "" +
 	"\x04tags\x18\x04 \x03(\tB\x03\xe0A\x01R\x04tags\x12\x1f\n" +
 	"\bdocument\x18\x05 \x01(\tB\x03\xe0A\x01R\bdocument\x12!\n" +
 	"\tthumbnail\x18\x06 \x01(\tB\x03\xe0A\x01R\tthumbnail\x12+\n" +
-	"\x05state\x18\a \x01(\x0e2\x10.memos.api.StateB\x03\xe0A\x01R\x05state\x12@\n" +
+	"\x05state\x18\a \x01(\x0e2\x10.memos.api.StateB\x03\xe0A\x01R\x05state\x120\n" +
+	"\x11background_layout\x18\n" +
+	" \x01(\tB\x03\xe0A\x01R\x10backgroundLayout\x12@\n" +
 	"\vcreate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +
 	"createTime\x12@\n" +
 	"\vupdate_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampB\x03\xe0A\x03R\n" +

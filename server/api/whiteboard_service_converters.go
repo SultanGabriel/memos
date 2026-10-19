@@ -20,6 +20,7 @@ func (s *APIService) convertWhiteboardFromStore(ctx context.Context, board *stor
 	result := &apipb.Whiteboard{
 		Name: "whiteboards/" + board.UID, Creator: BuildUserName(creator.Username), Title: board.Title,
 		Tags: board.Tags, State: convertStateFromStore(board.RowStatus),
+		BackgroundLayout: board.BackgroundLayout,
 		CreateTime: timestamppb.New(time.Unix(board.CreatedTs, 0)),
 		UpdateTime: timestamppb.New(time.Unix(board.UpdatedTs, 0)),
 	}

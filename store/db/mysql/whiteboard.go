@@ -18,10 +18,10 @@ func (d *DB) CreateWhiteboard(ctx context.Context, create *store.Whiteboard) (*s
 		return nil, err
 	}
 	result, err := d.db.ExecContext(ctx, `INSERT INTO whiteboard
-		(uid, creator_id, row_status, created_ts, updated_ts, title, payload, document, thumbnail_attachment_id)
-		VALUES (?, ?, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?), ?, ?, ?, ?)`,
+		(uid, creator_id, row_status, created_ts, updated_ts, title, payload, document, thumbnail_attachment_id, background_layout)
+		VALUES (?, ?, ?, FROM_UNIXTIME(?), FROM_UNIXTIME(?), ?, ?, ?, ?, ?)`,
 		create.UID, create.CreatorID, create.RowStatus, create.CreatedTs, create.UpdatedTs,
-		create.Title, string(payload), string(create.Document), create.ThumbnailAttachmentID)
+		create.Title, string(payload), string(create.Document), create.ThumbnailAttachmentID, create.BackgroundLayout)
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to create whiteboard")
 	}
@@ -62,7 +62,7 @@ func (d *DB) ListWhiteboards(ctx context.Context, find *store.FindWhiteboard) ([
 	if find.ExcludeDocument {
 		document = "'{}'"
 	}
-	query := `SELECT id, uid, creator_id, row_status, UNIX_TIMESTAMP(created_ts), UNIX_TIMESTAMP(updated_ts), title, payload, `+document+`, thumbnail_attachment_id
+	query := `SELECT id, uid, creator_id, row_status, UNIX_TIMESTAMP(created_ts), UNIX_TIMESTAMP(updated_ts), title, payload, `+document+`, thumbnail_attachment_id, background_layout
 		FROM whiteboard WHERE `+strings.Join(where, " AND ")+" ORDER BY "+order
 	if find.Limit != nil {
 		query, args = query+" LIMIT ?", append(args, *find.Limit)
@@ -84,7 +84,7 @@ func (d *DB) ListWhiteboards(ctx context.Context, find *store.FindWhiteboard) ([
 		var payload, document string
 		var thumbnail sql.NullInt64
 		if err := rows.Scan(&board.ID, &board.UID, &board.CreatorID, &board.RowStatus, &board.CreatedTs,
-			&board.UpdatedTs, &board.Title, &payload, &document, &thumbnail); err != nil {
+			&board.UpdatedTs, &board.Title, &payload, &document, &thumbnail, &board.BackgroundLayout); err != nil {
 			return nil, err
 		}
 		var metadata store.WhiteboardPayload
@@ -100,6 +100,9 @@ func (d *DB) ListWhiteboards(ctx context.Context, find *store.FindWhiteboard) ([
 
 func (d *DB) UpdateWhiteboard(ctx context.Context, update *store.UpdateWhiteboard) error {
 	set, args := []string{}, []any{}
+	if update.BackgroundLayout != nil {
+		set, args = append(set, "background_layout = ?"), append(args, *update.BackgroundLayout)
+	}
 	if update.Title != nil {
 		set, args = append(set, "title = ?"), append(args, *update.Title)
 	}
