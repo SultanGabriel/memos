@@ -7,6 +7,24 @@ export function loadWhiteboardDocument(store: Editor["store"], json: string) {
   loadSnapshot(store, { document });
 }
 
+/** Explicit, confirmed recovery only. Remote source keeps autosave from treating reload as an edit. */
+export function reloadWhiteboardDocument(editor: Editor, json: string) {
+  const document = JSON.parse(json || "{}") as TLEditorSnapshot["document"];
+  const previous = getSnapshot(editor.store).document;
+  editor.store.mergeRemoteChanges(() => {
+    try {
+      loadSnapshot(editor.store, {
+        document: Object.keys(document).length ? document : { schema: editor.store.schema.serialize(), store: {} },
+      });
+    } catch (error) {
+      // Snapshot validation may fail after replacing records. Preserve the live copy on failure.
+      loadSnapshot(editor.store, { document: previous });
+      throw error;
+    }
+  });
+  editor.clearHistory();
+}
+
 /** Only document records cross the API boundary. Never serialize the editor/session snapshot. */
 export function serializeWhiteboardDocument(editor: Editor): string {
   const { document } = getSnapshot(editor.store);

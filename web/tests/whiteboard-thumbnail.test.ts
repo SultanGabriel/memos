@@ -1,7 +1,16 @@
 import { describe, expect, it, vi } from "vitest";
 import { replaceWhiteboardThumbnail } from "@/lib/whiteboard-thumbnail";
+import { WhiteboardConflictError } from "@/lib/whiteboard-revision";
 
 describe("whiteboard thumbnail replacement", () => {
+  it("never deletes the old thumbnail when the revision-protected link conflicts", async () => {
+    const remove = vi.fn();
+    await expect(replaceWhiteboardThumbnail({
+      oldName: "attachments/old", upload: async () => "attachments/orphan",
+      link: async () => { throw new WhiteboardConflictError(); }, remove, onCleanupError: vi.fn(),
+    })).rejects.toBeInstanceOf(WhiteboardConflictError);
+    expect(remove).not.toHaveBeenCalled();
+  });
   it("awaits upload and link before deleting the old attachment", async () => {
     const events: string[] = [];
     let finishLink!: () => void;

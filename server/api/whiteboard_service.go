@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"encoding/json"
+	stderrors "errors"
 	"strings"
 
 	"google.golang.org/grpc/codes"
@@ -131,7 +132,7 @@ func (s *APIService) CreateWhiteboard(ctx context.Context, request *apipb.Create
 	if input.BackgroundLayout != "" && !store.ValidWhiteboardBackgroundLayout(input.BackgroundLayout) {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid background layout")
 	}
-	if input.Name != "" || input.Creator != "" || input.CreateTime != nil || input.UpdateTime != nil {
+	if input.Name != "" || input.Creator != "" || input.CreateTime != nil || input.UpdateTime != nil || input.Revision != 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "name and output fields must be unset")
 	}
 	if input.State != apipb.State_STATE_UNSPECIFIED && input.State != apipb.State_NORMAL {
@@ -184,7 +185,10 @@ func (s *APIService) UpdateWhiteboard(ctx context.Context, request *apipb.Update
 	if err != nil {
 		return nil, err
 	}
-	update := &store.UpdateWhiteboard{ID: board.ID}
+	if request.ExpectedRevision < 1 {
+		return nil, status.Errorf(codes.InvalidArgument, "positive expected_revision required")
+	}
+	update := &store.UpdateWhiteboard{ID: board.ID, ExpectedRevision: request.ExpectedRevision}
 	for _, path := range request.UpdateMask.Paths {
 		switch path {
 		case "background_layout":
@@ -221,10 +225,17 @@ func (s *APIService) UpdateWhiteboard(ctx context.Context, request *apipb.Update
 			return nil, status.Errorf(codes.InvalidArgument, "field cannot be updated: %s", path)
 		}
 	}
-	if err := s.Store.UpdateWhiteboard(ctx, update); err != nil {
+	updated, err := s.Store.UpdateWhiteboard(ctx, update)
+	if err != nil {
+		if stderrors.Is(err, store.ErrWhiteboardNotFound) {
+			return nil, status.Errorf(codes.NotFound, "whiteboard not found")
+		}
+		if stderrors.Is(err, store.ErrWhiteboardConflict) {
+			return nil, status.Errorf(codes.FailedPrecondition, "whiteboard was changed somewhere else")
+		}
 		return nil, status.Errorf(codes.Internal, "failed to update whiteboard: %v", err)
 	}
-	return s.GetWhiteboard(ctx, &apipb.GetWhiteboardRequest{Name: input.Name})
+	return s.convertWhiteboardFromStore(ctx, updated, true)
 }
 
 // DeleteWhiteboard uses the same permanent deletion convention as DeleteMemo.

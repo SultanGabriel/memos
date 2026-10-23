@@ -14,6 +14,7 @@ import (
 // Whiteboard is an independent drawing document. Relations use internal IDs.
 type Whiteboard struct {
 	ID                    int32
+	Revision              int64
 	UID                   string
 	CreatorID             int32
 	RowStatus             RowStatus
@@ -47,6 +48,7 @@ type FindWhiteboard struct {
 // UpdateWhiteboard patches fields by stable identity. ClearThumbnail explicitly unsets it.
 type UpdateWhiteboard struct {
 	ID                    int32
+	ExpectedRevision      int64
 	Title                 *string
 	BackgroundLayout      *string
 	Tags                  *[]string
@@ -61,6 +63,12 @@ type UpdateWhiteboard struct {
 type DeleteWhiteboard struct {
 	ID int32
 }
+
+// ErrWhiteboardNotFound indicates that the board no longer exists at mutation time.
+var ErrWhiteboardNotFound = errors.New("whiteboard not found")
+
+// ErrWhiteboardConflict indicates that another mutation changed the board revision.
+var ErrWhiteboardConflict = errors.New("whiteboard revision changed")
 
 // WhiteboardOrderSQL maps a bounded public sort specification to SQL identifiers.
 // The stable ID tie-breaker keeps offset pagination deterministic for equal values.
@@ -124,6 +132,7 @@ func (s *Store) CreateWhiteboard(ctx context.Context, create *Whiteboard) (*Whit
 	if create == nil || !identifier.UIDMatcher.MatchString(create.UID) || create.CreatorID <= 0 {
 		return nil, errors.New("whiteboard requires a valid UID and creator")
 	}
+	create.Revision = 1
 	if strings.TrimSpace(create.Title) == "" {
 		create.Title = "Untitled Whiteboard"
 	}
@@ -170,19 +179,22 @@ func (s *Store) GetWhiteboard(ctx context.Context, find *FindWhiteboard) (*White
 }
 
 // UpdateWhiteboard validates and applies a partial mutation.
-func (s *Store) UpdateWhiteboard(ctx context.Context, update *UpdateWhiteboard) error {
+func (s *Store) UpdateWhiteboard(ctx context.Context, update *UpdateWhiteboard) (*Whiteboard, error) {
 	if update == nil || update.ID <= 0 {
-		return errors.New("whiteboard ID required")
+		return nil, errors.New("whiteboard ID required")
+	}
+	if update.ExpectedRevision < 1 {
+		return nil, errors.New("positive expected whiteboard revision required")
 	}
 	if update.BackgroundLayout != nil && !ValidWhiteboardBackgroundLayout(*update.BackgroundLayout) {
-		return errors.New("invalid whiteboard background layout")
+		return nil, errors.New("invalid whiteboard background layout")
 	}
 	if update.RowStatus != nil && *update.RowStatus != Normal && *update.RowStatus != Archived {
-		return errors.New("invalid whiteboard state")
+		return nil, errors.New("invalid whiteboard state")
 	}
 	if update.Document != nil {
 		if err := ValidateWhiteboardDocument(*update.Document); err != nil {
-			return err
+			return nil, err
 		}
 	}
 	if update.Tags != nil {
@@ -190,10 +202,10 @@ func (s *Store) UpdateWhiteboard(ctx context.Context, update *UpdateWhiteboard) 
 		update.Tags = &tags
 	}
 	if update.Title != nil && strings.TrimSpace(*update.Title) == "" {
-		return errors.New("whiteboard title must not be blank")
+		return nil, errors.New("whiteboard title must not be blank")
 	}
 	if update.ClearThumbnail && update.ThumbnailAttachmentID != nil {
-		return errors.New("conflicting thumbnail update")
+		return nil, errors.New("conflicting thumbnail update")
 	}
 	if update.UpdatedTs == nil {
 		now := time.Now().Unix()

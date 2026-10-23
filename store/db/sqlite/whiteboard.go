@@ -13,6 +13,7 @@ import (
 )
 
 func (d *DB) CreateWhiteboard(ctx context.Context, create *store.Whiteboard) (*store.Whiteboard, error) {
+	create.Revision = 1
 	payload, err := json.Marshal(store.WhiteboardPayload{Tags: create.Tags})
 	if err != nil {
 		return nil, err
@@ -57,7 +58,7 @@ func (d *DB) ListWhiteboards(ctx context.Context, find *store.FindWhiteboard) ([
 	if find.ExcludeDocument {
 		document = "'{}'"
 	}
-	query := `SELECT id, uid, creator_id, row_status, created_ts, updated_ts, title, payload, `+document+`, thumbnail_attachment_id, background_layout
+	query := `SELECT id, uid, creator_id, row_status, created_ts, updated_ts, title, payload, `+document+`, thumbnail_attachment_id, background_layout, revision
 		FROM whiteboard WHERE `+strings.Join(where, " AND ")+" ORDER BY "+order
 	if find.Limit != nil {
 		query, args = query+" LIMIT ?", append(args, *find.Limit)
@@ -79,7 +80,7 @@ func (d *DB) ListWhiteboards(ctx context.Context, find *store.FindWhiteboard) ([
 		var payload, document string
 		var thumbnail sql.NullInt64
 		if err := rows.Scan(&board.ID, &board.UID, &board.CreatorID, &board.RowStatus, &board.CreatedTs,
-			&board.UpdatedTs, &board.Title, &payload, &document, &thumbnail, &board.BackgroundLayout); err != nil {
+			&board.UpdatedTs, &board.Title, &payload, &document, &thumbnail, &board.BackgroundLayout, &board.Revision); err != nil {
 			return nil, err
 		}
 		var metadata store.WhiteboardPayload
@@ -93,7 +94,10 @@ func (d *DB) ListWhiteboards(ctx context.Context, find *store.FindWhiteboard) ([
 	return result, rows.Err()
 }
 
-func (d *DB) UpdateWhiteboard(ctx context.Context, update *store.UpdateWhiteboard) error {
+func (d *DB) UpdateWhiteboard(ctx context.Context, update *store.UpdateWhiteboard) (*store.Whiteboard, error) {
+	if update.ExpectedRevision < 1 {
+		return nil, errors.New("positive expected whiteboard revision required")
+	}
 	set, args := []string{}, []any{}
 	if update.BackgroundLayout != nil {
 		set, args = append(set, "background_layout = ?"), append(args, *update.BackgroundLayout)
@@ -104,7 +108,7 @@ func (d *DB) UpdateWhiteboard(ctx context.Context, update *store.UpdateWhiteboar
 	if update.Tags != nil {
 		payload, err := json.Marshal(store.WhiteboardPayload{Tags: *update.Tags})
 		if err != nil {
-			return err
+			return nil, err
 		}
 		set, args = append(set, "payload = ?"), append(args, string(payload))
 	}
@@ -122,12 +126,55 @@ func (d *DB) UpdateWhiteboard(ctx context.Context, update *store.UpdateWhiteboar
 	} else if update.ThumbnailAttachmentID != nil {
 		set, args = append(set, "thumbnail_attachment_id = ?"), append(args, *update.ThumbnailAttachmentID)
 	}
-	if len(set) == 0 {
-		return nil
+	set = append(set, "revision = revision + 1")
+	query := "UPDATE whiteboard SET "+strings.Join(set, ", ")+" WHERE id = ? AND revision = ?"
+	args = append(args, update.ID, update.ExpectedRevision)
+	tx, err := d.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
 	}
-	args = append(args, update.ID)
-	_, err := d.db.ExecContext(ctx, "UPDATE whiteboard SET "+strings.Join(set, ", ")+" WHERE id = ?", args...)
-	return errors.Wrap(err, "failed to update whiteboard")
+	defer func() { _ = tx.Rollback() }()
+	result, err := tx.ExecContext(ctx, query, args...)
+	if err != nil {
+		return nil, errors.Wrap(err, "failed to update whiteboard")
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if count == 0 {
+		var exists int
+		err := tx.QueryRowContext(ctx, "SELECT 1 FROM whiteboard WHERE id = ?", update.ID).Scan(&exists)
+		if err == sql.ErrNoRows {
+			return nil, store.ErrWhiteboardNotFound
+		}
+		if err != nil {
+			return nil, err
+		}
+		return nil, store.ErrWhiteboardConflict
+	}
+	// Read while holding the update lock: never return another writer's revision.
+	board := &store.Whiteboard{}
+	var payload, document string
+	var thumbnail sql.NullInt64
+	err = tx.QueryRowContext(ctx, `SELECT id, uid, creator_id, row_status, created_ts, updated_ts,
+		title, payload, document, thumbnail_attachment_id, background_layout, revision
+		FROM whiteboard WHERE id = ?`, update.ID).Scan(
+		&board.ID, &board.UID, &board.CreatorID, &board.RowStatus, &board.CreatedTs, &board.UpdatedTs,
+		&board.Title, &payload, &document, &thumbnail, &board.BackgroundLayout, &board.Revision)
+	if err != nil {
+		return nil, err
+	}
+	var metadata store.WhiteboardPayload
+	if err := json.Unmarshal([]byte(payload), &metadata); err != nil {
+		return nil, errors.Wrap(err, "invalid whiteboard payload")
+	}
+	board.Tags, board.Document = metadata.Tags, json.RawMessage(document)
+	board.ThumbnailAttachmentID = store.NullInt32Pointer(thumbnail)
+	if err := tx.Commit(); err != nil {
+		return nil, err
+	}
+	return board, nil
 }
 
 func (d *DB) DeleteWhiteboard(ctx context.Context, delete *store.DeleteWhiteboard) error {

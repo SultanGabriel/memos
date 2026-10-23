@@ -14,7 +14,7 @@ type Driver interface {
 	// Whiteboard model related methods.
 	CreateWhiteboard(ctx context.Context, create *Whiteboard) (*Whiteboard, error)
 	ListWhiteboards(ctx context.Context, find *FindWhiteboard) ([]*Whiteboard, error)
-	UpdateWhiteboard(ctx context.Context, update *UpdateWhiteboard) error
+	UpdateWhiteboard(ctx context.Context, update *UpdateWhiteboard) (*Whiteboard, error)
 	DeleteWhiteboard(ctx context.Context, delete *DeleteWhiteboard) error
 
 	IsInitialized(ctx context.Context) (bool, error)

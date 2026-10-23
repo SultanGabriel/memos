@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { createWhiteboardAutosave } from "@/lib/whiteboard-autosave";
+import { WhiteboardConflictError } from "@/lib/whiteboard-revision";
 
 // { getSnapshot, save, debounceMs } -> { status, dirty, markChanged, saveNow, dispose }.
 // Notifications carry no snapshot: serialization must happen only when a save starts.
@@ -23,6 +24,30 @@ describe("whiteboard autosave", () => {
     };
     return { controller, save, getSnapshot, change };
   };
+
+  it("suspends after conflict, keeps newer edits dirty, and never retries until explicit reset", async () => {
+    const save = vi.fn<(snapshot: string) => Promise<void>>().mockRejectedValueOnce(new WhiteboardConflictError());
+    const { controller, change, getSnapshot } = setup(save);
+    change("Local");
+    await vi.advanceTimersByTimeAsync(2000);
+    expect(controller.status).toBe("conflict");
+    expect(controller.dirty).toBe(true);
+    change("New local strokes");
+    await controller.saveNow();
+    await vi.advanceTimersByTimeAsync(10000);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(getSnapshot).toHaveBeenCalledTimes(1);
+    expect(controller.status).toBe("conflict");
+    expect(controller.dirty).toBe(true);
+    await controller.whenIdle();
+    controller.reset(); // Caller explicitly installed the server snapshot.
+    expect(controller.dirty).toBe(false);
+    save.mockResolvedValue(undefined);
+    change("After reload");
+    await controller.saveNow();
+    expect(save).toHaveBeenLastCalledWith("After reload");
+    expect(controller.status).toBe("saved");
+  });
 
   it("debounces changes and captures only the latest snapshot when saving", async () => {
     const { controller, change, save, getSnapshot } = setup();

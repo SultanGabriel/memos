@@ -16,6 +16,7 @@ Add upcoming changes under **Unreleased**, then move them into a new version sec
 - A separate Writing Pen with local controls for size, smoothing, streamline, thinning, pressure simulation, taper, and caps; each stroke keeps its original rendering settings.
 - Independently movable toolbar and color/style docks with local Top, Bottom, Left, and Right preferences, shared docking on the same edge, and iPad safe-area spacing.
 - Build-time tldraw license configuration through `VITE_TLDRAW_LICENSE_KEY`, with a frontend environment example and setup documentation.
+- Resource-wide revision protection prevents stale clients from overwriting documents or metadata. Conflicts pause saving and offer a duplicate, a confirmed server reload, or keeping the local copy open.
 
 ### Changed
 

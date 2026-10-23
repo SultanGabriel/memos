@@ -30,6 +30,16 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 	require.GreaterOrEqual(t, board.UpdatedTs, board.CreatedTs)
 	require.Nil(t, board.ThumbnailAttachmentID)
 	require.Equal(t, "blank", board.BackgroundLayout)
+	require.Equal(t, int64(1), board.Revision)
+	revision := board.Revision
+	apply := func(update *store.UpdateWhiteboard) error {
+		update.ExpectedRevision = revision
+		updated, err := ts.UpdateWhiteboard(ctx, update)
+		if err == nil {
+			revision = updated.Revision
+		}
+		return err
+	}
 
 	byID, err := ts.GetWhiteboard(ctx, &store.FindWhiteboard{ID: &board.ID})
 	require.NoError(t, err)
@@ -56,7 +66,7 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 	title, tags := "Revised sketch", []string{"work", "ideas"}
 	document := json.RawMessage(`{"store":{"opaque":{"value":42}},"schema":{"schemaVersion":2}}`)
 	updatedTs := board.UpdatedTs + 10
-	require.NoError(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{
+	require.NoError(t, apply(&store.UpdateWhiteboard{
 		ID: board.ID, Title: &title, Tags: &tags, Document: &document,
 		ThumbnailAttachmentID: &first.ID, UpdatedTs: &updatedTs,
 	}))
@@ -73,7 +83,7 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 	require.JSONEq(t, string(document), string(got.Document))
 	require.Equal(t, &first.ID, got.ThumbnailAttachmentID)
 	for _, layout := range []string{"lines", "engineering", "graph", "isometric", "blank"} {
-		require.NoError(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, BackgroundLayout: &layout}))
+		require.NoError(t, apply(&store.UpdateWhiteboard{ID: board.ID, BackgroundLayout: &layout}))
 		got, err := ts.GetWhiteboard(ctx, &store.FindWhiteboard{ID: &board.ID})
 		require.NoError(t, err)
 		require.Equal(t, layout, got.BackgroundLayout)
@@ -81,10 +91,10 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 		require.JSONEq(t, string(document), string(got.Document))
 	}
 	invalidLayout := "unsupported"
-	require.Error(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, BackgroundLayout: &invalidLayout}))
+	require.Error(t, apply(&store.UpdateWhiteboard{ID: board.ID, BackgroundLayout: &invalidLayout}))
 
 	// Replacement only changes the reference; attachment cleanup belongs to the client.
-	require.NoError(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, ThumbnailAttachmentID: &second.ID}))
+	require.NoError(t, apply(&store.UpdateWhiteboard{ID: board.ID, ThumbnailAttachmentID: &second.ID}))
 	got, err = ts.GetWhiteboard(ctx, &store.FindWhiteboard{ID: &board.ID})
 	require.NoError(t, err)
 	require.NotNil(t, got)
@@ -95,7 +105,7 @@ func TestWhiteboardStoreLifecycle(t *testing.T) {
 
 	// Archiving and deletion are distinct in Memos. A NORMAL query excludes archives.
 	archived, normal := store.Archived, store.Normal
-	require.NoError(t, ts.UpdateWhiteboard(ctx, &store.UpdateWhiteboard{ID: board.ID, RowStatus: &archived}))
+	require.NoError(t, apply(&store.UpdateWhiteboard{ID: board.ID, RowStatus: &archived}))
 	active, err := ts.ListWhiteboards(ctx, &store.FindWhiteboard{CreatorID: &owner.ID, RowStatus: &normal})
 	require.NoError(t, err)
 	require.Empty(t, active)

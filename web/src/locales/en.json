@@ -1,5 +1,15 @@
 {
   "whiteboards": {
+    "conflict-status": "Conflict",
+    "conflict-title": "This whiteboard was changed somewhere else.",
+    "conflict-description": "Your local changes have not been discarded. Saving is suspended until you save a duplicate or reload the newer version.",
+    "conflict-actions": "Resolve conflict",
+    "conflict-duplicate": "Save as duplicate",
+    "conflict-reload": "Reload newer version",
+    "conflict-keep": "Keep local copy open",
+    "conflict-reload-confirm": "Discard your local changes and load the newest saved version? This cannot be undone.",
+    "conflict-recovering": "Recovering whiteboard…",
+    "conflict-recovery-error": "Could not recover the whiteboard. Your local changes are still open.",
     "sidebar-collapse": "Collapse sidebar",
     "sidebar-expand": "Expand sidebar",
     "toolbar-position": "Toolbar position",

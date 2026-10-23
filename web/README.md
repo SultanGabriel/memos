@@ -40,3 +40,18 @@ Narrow screens retain tldraw's native color popover.
 The [Writing Pen](src/components/Whiteboard/writingPen/README.md) has a separate
 local profile. These preferences stay in the browser; the selected background
 layout belongs to the board and is saved through the Whiteboard API.
+
+## Whiteboard conflicts
+
+One `revision` covers the whole board. Every update supplies `expected_revision`;
+the database checks it atomically and increments the revision once. Frontend
+document, title, tags, background, and thumbnail writes share one serialized
+revision coordinator per viewer/board session.
+
+`FAILED_PRECONDITION` pauses all board saves and preview generation while keeping
+the live drawing intact. The conflict controls can save the current document and
+metadata as a new board, explicitly reload the newer server version after
+confirmation, or leave the local copy open with saving suspended. Duplicates
+omit the thumbnail reference and generate their own preview. Ordinary cache
+updates never reload the canvas. Conflict recovery is in-memory only; no offline
+document storage or automatic merge is implemented.

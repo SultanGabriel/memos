@@ -43,6 +43,7 @@ func TestWhiteboardServiceAuthorization(t *testing.T) {
 			require.Equal(t, "users/"+owner.Username, board.Creator)
 			require.Equal(t, "Untitled Whiteboard", board.Title)
 			require.Equal(t, apipb.State_NORMAL, board.State)
+			require.Equal(t, int64(1), board.Revision)
 			require.NotNil(t, board.CreateTime)
 			require.NotNil(t, board.UpdateTime)
 
@@ -52,6 +53,7 @@ func TestWhiteboardServiceAuthorization(t *testing.T) {
 				require.Equal(t, board.Name, got.Name)
 			}
 			updated, err := ts.Service.UpdateWhiteboard(actor.ctx, &apipb.UpdateWhiteboardRequest{
+				ExpectedRevision: board.Revision,
 				Whiteboard: &apipb.Whiteboard{Name: board.Name, Title: "Changed", BackgroundLayout: "lines"},
 				UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title", "background_layout"}},
 			})
@@ -88,15 +90,18 @@ func TestWhiteboardBackgroundMetadata(t *testing.T) {
 	require.Equal(t, "blank", board.BackgroundLayout)
 	for _, layout := range []string{"lines", "engineering", "graph", "isometric", "blank"} {
 		updated, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+			ExpectedRevision: board.Revision,
 			Whiteboard: &apipb.Whiteboard{Name: board.Name, BackgroundLayout: layout, Document: `{"unmasked":true}`},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"background_layout"}},
 		})
 		require.NoError(t, err)
 		require.Equal(t, layout, updated.BackgroundLayout)
 		require.JSONEq(t, board.Document, updated.Document)
+		board.Revision = updated.Revision
 	}
 	for _, layout := range []string{"", "unsupported"} {
 		_, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+			ExpectedRevision: board.Revision,
 			Whiteboard: &apipb.Whiteboard{Name: board.Name, BackgroundLayout: layout},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"background_layout"}},
 		})
@@ -107,6 +112,7 @@ func TestWhiteboardBackgroundMetadata(t *testing.T) {
 	})
 	require.NoError(t, err)
 	updated, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+		ExpectedRevision: created.Revision,
 		Whiteboard: &apipb.Whiteboard{Name: created.Name, Title: "Renamed", BackgroundLayout: "lines"},
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title"}},
 	})
@@ -224,6 +230,7 @@ func TestWhiteboardServiceMaskedUpdatesAndThumbnails(t *testing.T) {
 	document := `{"store":{},"schema":{"schemaVersion":2}}`
 	updated, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
 		Whiteboard: &apipb.Whiteboard{Name: board.Name, Title: "Plan", Tags: []string{" work ", "", "work", "Work"}, Document: document},
+		ExpectedRevision: board.Revision,
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"title", "tags", "document"}},
 	})
 	require.NoError(t, err)
@@ -231,6 +238,7 @@ func TestWhiteboardServiceMaskedUpdatesAndThumbnails(t *testing.T) {
 	require.JSONEq(t, document, updated.Document)
 	for _, attachment := range []*store.Attachment{first, second} {
 		updated, err = ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
+			ExpectedRevision: updated.Revision,
 			Whiteboard: &apipb.Whiteboard{Name: board.Name, Title: "unmasked", Thumbnail: "attachments/"+attachment.UID},
 			UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"thumbnail"}},
 		})
@@ -241,17 +249,20 @@ func TestWhiteboardServiceMaskedUpdatesAndThumbnails(t *testing.T) {
 	}
 	_, err = ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
 		Whiteboard: &apipb.Whiteboard{Name: board.Name, Thumbnail: "attachments/"+foreign.UID},
+		ExpectedRevision: updated.Revision,
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"thumbnail"}},
 	})
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 	for _, path := range []string{"creator", "name", "create_time", "update_time", "*"} {
 		_, err := ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
 			Whiteboard: &apipb.Whiteboard{Name: board.Name}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{path}},
+			ExpectedRevision: board.Revision,
 		})
 		require.Equal(t, codes.InvalidArgument, status.Code(err), path)
 	}
 	_, err = ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
 		Whiteboard: &apipb.Whiteboard{Name: board.Name, Document: "null"},
+		ExpectedRevision: board.Revision,
 		UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"document"}},
 	})
 	require.Equal(t, codes.InvalidArgument, status.Code(err))
@@ -260,6 +271,7 @@ func TestWhiteboardServiceMaskedUpdatesAndThumbnails(t *testing.T) {
 	require.Equal(t, "attachments/"+second.UID, updated.Thumbnail, "failed updates preserve the current thumbnail")
 	updated, err = ts.Service.UpdateWhiteboard(userCtx, &apipb.UpdateWhiteboardRequest{
 		Whiteboard: &apipb.Whiteboard{Name: board.Name}, UpdateMask: &fieldmaskpb.FieldMask{Paths: []string{"thumbnail"}},
+		ExpectedRevision: updated.Revision,
 	})
 	require.NoError(t, err)
 	require.Empty(t, updated.Thumbnail)

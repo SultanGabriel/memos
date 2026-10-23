@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen } from "@testing-library/react";
 import { useEffect, useRef } from "react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import type { Editor, TldrawProps } from "tldraw";
+import type { ConfirmDialogProps } from "@/components/ConfirmDialog";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import WhiteboardDetail from "@/pages/WhiteboardDetail";
 import WhiteboardSidebarSlot from "@/components/Whiteboard/WhiteboardSidebarSlot";
@@ -13,6 +14,7 @@ interface TestStore {
   document: { schema: object; store: Record<string, unknown> };
   listeners: Set<() => void>;
   listen(listener: () => void): () => void;
+  mergeRemoteChanges(apply: () => void): void;
 }
 
 const state = vi.hoisted(() => ({
@@ -20,6 +22,10 @@ const state = vi.hoisted(() => ({
   loadSnapshot: vi.fn(),
   getSnapshot: vi.fn(),
   patch: vi.fn(),
+  duplicate: vi.fn(),
+  reload: vi.fn(),
+  navigate: vi.fn(),
+  conflict: false,
   stores: [] as TestStore[],
   editor: null as Editor | null,
   mounts: 0,
@@ -28,6 +34,7 @@ const state = vi.hoisted(() => ({
   sidebarOpen: true,
   query: {} as { data?: Whiteboard; isPending: boolean; isError: boolean; isFetchedAfterMount: boolean },
 }));
+const coordinator = { getSnapshot: () => ({ conflict: state.conflict }) };
 
 // Substitute only the canvas boundary. Exercise our real route, session, persistence, and autosave code.
 // Model the installed tldraw version's documented identity-sensitive initialization inputs.
@@ -48,6 +55,7 @@ vi.mock("tldraw", () => ({
         registerExternalContentHandler: vi.fn(),
         getCurrentToolId: vi.fn(() => "select"),
         setCurrentTool: vi.fn(),
+        clearHistory: vi.fn(),
         user: { updateUserPreferences: vi.fn() },
       } as unknown as Editor;
       state.editor = editor;
@@ -61,10 +69,18 @@ vi.mock("@/hooks/useCurrentUser", () => ({ default: () => ({ name: "users/owner"
 vi.mock("@/hooks/useResolvedTheme", () => ({ useResolvedTheme: () => state.theme }));
 vi.mock("@/hooks/useWhiteboardQueries", () => ({
   useWhiteboard: () => ({ ...state.query, refetch: vi.fn() }),
-  useUpdateWhiteboard: () => ({ mutateAsync: state.patch }),
+  useUpdateWhiteboard: () => ({ mutateAsync: state.patch, coordinator, conflict: state.conflict, reloadFromServer: state.reload }),
+  useDuplicateWhiteboard: () => ({ mutateAsync: state.duplicate }),
 }));
 vi.mock("@/utils/i18n", () => ({ useTranslate: () => (key: string) => key }));
-vi.mock("@/components/ConfirmDialog", () => ({ default: () => null }));
+vi.mock("@/components/ConfirmDialog", () => ({
+  default: ({ open, title, onConfirm, onOpenChange, confirmLabel, cancelLabel }: ConfirmDialogProps) => open ? (
+    <div role="dialog" aria-label={String(title)}>
+      <button type="button" onClick={() => { void onConfirm(); }}>{confirmLabel}</button>
+      <button type="button" onClick={() => onOpenChange(false)}>{cancelLabel}</button>
+    </div>
+  ) : null,
+}));
 vi.mock("@/components/Whiteboard/assets", () => ({
   WHITEBOARD_IMAGE_TYPES: ["image/png"],
   createWhiteboardAssets: () => ({ assets: {}, whenIdle: async () => {} }),
@@ -75,6 +91,7 @@ vi.mock("@/components/Whiteboard/thumbnail", () => ({
 vi.mock("react-router-dom", async (importOriginal) => ({
   ...await importOriginal<typeof import("react-router-dom")>(),
   useBlocker: () => ({ state: "unblocked" }),
+  useNavigate: () => state.navigate,
 }));
 
 const tree = () => (
@@ -94,6 +111,7 @@ beforeEach(() => {
   state.unmounts = 0;
   state.theme = "light";
   state.sidebarOpen = true;
+  state.conflict = false;
   localStorage.removeItem("memos-whiteboard-writing-pen");
   localStorage.removeItem("memos-whiteboard-toolbar-position");
   localStorage.removeItem("memos-whiteboard-style-panel-position");
@@ -104,6 +122,7 @@ beforeEach(() => {
   state.createStore.mockImplementation(() => {
     const store: TestStore = {
       document: { schema: {}, store: {} },
+      mergeRemoteChanges: (apply: () => void) => apply(),
       listeners: new Set(),
       listen(listener) { store.listeners.add(listener); return () => { store.listeners.delete(listener); }; },
     };
@@ -206,5 +225,71 @@ describe("whiteboard editor lifecycle", () => {
     expect(state.mounts).toBe(1);
     expect(state.unmounts).toBe(0);
     view.unmount();
+  });
+
+  it("keeps live edits open on conflict, stops saves, and duplicates current document/metadata without the thumbnail", async () => {
+    const view = render(tree());
+    const store = state.stores[0];
+    const editor = state.editor;
+    const local = { schema: {}, store: { "shape:local": { typeName: "shape", type: "draw" } } };
+    act(() => { store.document = local; for (const listener of store.listeners) listener(); });
+    fireEvent.change(screen.getByLabelText("whiteboards.board-title"), { target: { value: "Local title" } });
+    fireEvent.change(screen.getByLabelText("whiteboards.tags"), { target: { value: "work, idea" } });
+    fireEvent.click(screen.getByRole("radio", { name: "whiteboards.background-graph" }));
+    state.conflict = true;
+    view.rerender(tree());
+    expect(state.editor).toBe(editor);
+    expect(store.document).toBe(local);
+    expect(state.loadSnapshot).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.conflict-keep" }));
+    await act(async () => vi.advanceTimersByTimeAsync(10000));
+    fireEvent.keyDown(window, { key: "s", ctrlKey: true });
+    expect(state.patch).not.toHaveBeenCalled();
+    expect(store.document).toBe(local);
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.conflict-actions" }));
+    state.duplicate.mockResolvedValue(create(WhiteboardSchema, { name: "whiteboards/conflict-copy", revision: 1n }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "whiteboards.conflict-duplicate" })); });
+    expect(state.duplicate).toHaveBeenCalledWith({
+      document: JSON.stringify(local), title: "Local title (conflict copy)", tags: ["work", "idea"], backgroundLayout: "graph",
+    });
+    expect(state.duplicate.mock.calls[0][0]).not.toHaveProperty("thumbnail");
+    expect(state.navigate).toHaveBeenCalledWith("/whiteboards/conflict-copy");
+    expect(state.editor).toBe(editor);
+    expect(state.createStore).toHaveBeenCalledTimes(1);
+  });
+
+  it("requires confirmation before explicit server reload, then resumes autosave in the same editor", async () => {
+    const view = render(tree());
+    const store = state.stores[0];
+    const editor = state.editor;
+    const local = { schema: {}, store: { "shape:local": { typeName: "shape", type: "draw" } } };
+    act(() => { store.document = local; for (const listener of store.listeners) listener(); });
+    state.conflict = true;
+    view.rerender(tree());
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.conflict-reload" }));
+    expect(state.reload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "common.cancel" }));
+    expect(store.document).toBe(local);
+    const serverDocument = { schema: {}, store: { "shape:server": { typeName: "shape", type: "draw" } } };
+    const latest = create(WhiteboardSchema, {
+      title: "Server title", tags: ["server"], backgroundLayout: "lines", document: JSON.stringify(serverDocument), revision: 5n,
+    });
+    state.reload.mockImplementation(async (apply: (board: Whiteboard) => void) => {
+      apply(latest);
+      state.conflict = false;
+      return latest;
+    });
+    fireEvent.click(screen.getByRole("button", { name: "whiteboards.conflict-reload" }));
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "whiteboards.conflict-reload" })); });
+    expect(store.document).toEqual(serverDocument);
+    expect(screen.getByLabelText("whiteboards.board-title")).toHaveValue("Server title");
+    expect(editor?.clearHistory).toHaveBeenCalledTimes(1);
+    expect(state.editor).toBe(editor);
+    expect(state.createStore).toHaveBeenCalledTimes(1);
+    expect(state.loadSnapshot).toHaveBeenCalledTimes(1); // Only the explicit reload; initial board was {}.
+    state.patch.mockResolvedValue(undefined);
+    act(() => { for (const listener of store.listeners) listener(); });
+    await act(async () => vi.advanceTimersByTimeAsync(2000));
+    expect(state.patch).toHaveBeenCalledWith({ whiteboard: { document: JSON.stringify(serverDocument) }, updateMask: ["document"] });
   });
 });

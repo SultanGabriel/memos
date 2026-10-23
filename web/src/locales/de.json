@@ -1,5 +1,15 @@
 {
   "whiteboards": {
+    "conflict-status": "Konflikt",
+    "conflict-title": "Dieses Whiteboard wurde an anderer Stelle geändert.",
+    "conflict-description": "Deine lokalen Änderungen wurden nicht verworfen. Das Speichern bleibt ausgesetzt, bis du eine Kopie speicherst oder die neuere Version lädst.",
+    "conflict-actions": "Konflikt lösen",
+    "conflict-duplicate": "Als Kopie speichern",
+    "conflict-reload": "Neuere Version laden",
+    "conflict-keep": "Lokale Kopie geöffnet lassen",
+    "conflict-reload-confirm": "Lokale Änderungen verwerfen und die neueste gespeicherte Version laden? Dies kann nicht rückgängig gemacht werden.",
+    "conflict-recovering": "Whiteboard wird wiederhergestellt…",
+    "conflict-recovery-error": "Das Whiteboard konnte nicht wiederhergestellt werden. Deine lokalen Änderungen sind weiterhin geöffnet.",
     "sidebar-collapse": "Seitenleiste einklappen",
     "sidebar-expand": "Seitenleiste ausklappen",
     "toolbar-position": "Position der Werkzeugleiste",

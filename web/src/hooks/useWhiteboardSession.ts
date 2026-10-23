@@ -13,6 +13,8 @@ export function useWhiteboardSession({
   patch,
   onDocumentSaved,
   getDocument,
+  conflicted = false,
+  isConflicted = () => false,
 }: {
   initialTitle: string;
   initialTags: string[];
@@ -20,24 +22,28 @@ export function useWhiteboardSession({
   patch: (value: WhiteboardPatch) => Promise<unknown>;
   onDocumentSaved: () => void;
   getDocument: (editor: Editor) => Promise<string>;
+  conflicted?: boolean;
+  isConflicted?: () => boolean;
 }) {
   const [title, setTitle] = useState(initialTitle);
   const [tags, setTags] = useState(initialTags.join(", "));
   const [background, setBackground] = useState(initialBackground);
   const values = useRef({ title, tags, background });
-  const callbacks = useRef({ patch, onDocumentSaved, getDocument });
-  callbacks.current = { patch, onDocumentSaved, getDocument };
+  const callbacks = useRef({ patch, onDocumentSaved, getDocument, isConflicted });
+  callbacks.current = { patch, onDocumentSaved, getDocument, isConflicted };
   const controllers = useRef<{
     title?: WhiteboardAutosaveController;
     tags?: WhiteboardAutosaveController;
     document?: WhiteboardAutosaveController;
     background?: WhiteboardAutosaveController;
   }>({});
+  const documentSubscription = useRef<{ pause: () => void; resume: () => void } | null>(null);
   const [, render] = useState(0);
   const refresh = useCallback(() => render((value) => value + 1), []);
 
   useEffect(() => {
     const titleSave = createWhiteboardAutosave({
+      isConflicted: () => callbacks.current.isConflicted(),
       getSnapshot: () => values.current.title,
       save: async (title) => {
         if (!title.trim()) throw new Error("Title must not be empty");
@@ -46,6 +52,7 @@ export function useWhiteboardSession({
       debounceMs: 700,
     });
     const tagSave = createWhiteboardAutosave({
+      isConflicted: () => callbacks.current.isConflicted(),
       getSnapshot: () => parseWhiteboardTags(values.current.tags),
       save: async (tags) => {
         await callbacks.current.patch({ whiteboard: { tags }, updateMask: ["tags"] });
@@ -54,6 +61,7 @@ export function useWhiteboardSession({
     });
     controllers.current.title = titleSave;
     const backgroundSave = createWhiteboardAutosave({
+      isConflicted: () => callbacks.current.isConflicted(),
       getSnapshot: () => values.current.background,
       save: async (backgroundLayout) => {
         await callbacks.current.patch({ whiteboard: { backgroundLayout }, updateMask: ["background_layout"] });
@@ -75,9 +83,14 @@ export function useWhiteboardSession({
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (conflicted) for (const controller of Object.values(controllers.current)) controller?.suspend();
+  }, [conflicted]);
+
   const attachDocument = useCallback(
     (editor: Editor) => {
       const document = createWhiteboardAutosave({
+        isConflicted: () => callbacks.current.isConflicted(),
         getSnapshot: () => callbacks.current.getDocument(editor),
         save: async (snapshot) => {
           const json = await snapshot;
@@ -87,9 +100,18 @@ export function useWhiteboardSession({
       });
       controllers.current.document = document;
       const unsubscribe = document.subscribe(refresh);
-      const stopListening = editor.store.listen(() => document.markChanged(), { scope: "document" });
+      const listen = () => editor.store.listen(() => document.markChanged(), { scope: "document", source: "user" });
+      let stopListening = listen();
+      let attached = true;
+      const subscription = {
+        pause: () => stopListening(),
+        resume: () => { if (attached) stopListening = listen(); },
+      };
+      documentSubscription.current = subscription;
       return () => {
+        attached = false;
         stopListening();
+        if (documentSubscription.current === subscription) documentSubscription.current = null;
         unsubscribe();
         document.dispose();
         if (controllers.current.document === document) controllers.current.document = undefined;
@@ -97,19 +119,24 @@ export function useWhiteboardSession({
     },
     [refresh],
   );
-  const isDirty = useCallback(() => Object.values(controllers.current).some((controller) => controller?.dirty), []);
-  const isDocumentClean = useCallback(() => !controllers.current.document?.dirty, []);
+  const isDirty = useCallback(
+    () => callbacks.current.isConflicted() || Object.values(controllers.current).some((controller) => controller?.dirty),
+    [],
+  );
+  const isDocumentClean = useCallback(() => !callbacks.current.isConflicted() && !controllers.current.document?.dirty, []);
   const saveNow = useCallback(async () => {
     await Promise.all(Object.values(controllers.current).map((controller) => controller?.saveNow()));
   }, []);
   const statuses = Object.values(controllers.current).map((controller) => controller?.status);
-  const status: SaveStatus = statuses.includes("error")
-    ? "error"
-    : statuses.includes("saving")
-      ? "saving"
-      : isDirty()
-        ? "unsaved"
-        : "saved";
+  const status: SaveStatus = conflicted || statuses.includes("conflict")
+    ? "conflict"
+    : statuses.includes("error")
+      ? "error"
+      : statuses.includes("saving")
+        ? "saving"
+        : isDirty()
+          ? "unsaved"
+          : "saved";
   return {
     title,
     tags,
@@ -119,6 +146,22 @@ export function useWhiteboardSession({
     isDocumentClean,
     saveNow,
     attachDocument,
+    getMetadata: () => ({ ...values.current, tags: parseWhiteboardTags(values.current.tags) }),
+    replaceDocument(apply: () => void) {
+      const subscription = documentSubscription.current;
+      subscription?.pause();
+      try { apply(); } finally { subscription?.resume(); }
+    },
+    async whenIdle() {
+      await Promise.all(Object.values(controllers.current).map((controller) => controller?.whenIdle()));
+    },
+    resetFromServer(metadata: { title: string; tags: string[]; background: BackgroundLayout }) {
+      values.current = { ...metadata, tags: metadata.tags.join(", ") };
+      setTitle(metadata.title);
+      setTags(values.current.tags);
+      setBackground(metadata.background);
+      for (const controller of Object.values(controllers.current)) controller?.reset();
+    },
     setBackground(value: BackgroundLayout) {
       values.current.background = value;
       setBackground(value);

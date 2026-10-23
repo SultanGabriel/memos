@@ -22,6 +22,10 @@ Add entries under a `## Unreleased` heading. After the release ships, rename it 
 
 ### Breaking
 
+- `WhiteboardService.UpdateWhiteboard` now requires a positive `expected_revision` matching the current
+  `Whiteboard.revision`. Every successful masked update increments that revision once; stale writes return
+  `FAILED_PRECONDITION` without modifying the resource. Clients must serialize all board mutations using
+  the revision returned by the previous successful update.
 - Access tokens are now bound to the user's password hash and become invalid immediately after a password change or
   an administrator password reset. Pre-upgrade access tokens are also rejected; clients must refresh them or sign in
   again. The browser session that changes its own password can still refresh; other refresh sessions are revoked.

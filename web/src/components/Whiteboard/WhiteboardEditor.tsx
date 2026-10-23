@@ -2,7 +2,7 @@ import { ArrowLeftIcon } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { toast } from "react-hot-toast";
 import { createPortal } from "react-dom";
-import { Link, useBlocker } from "react-router-dom";
+import { Link, useBlocker, useNavigate } from "react-router-dom";
 import { createTLStore, type Editor, Tldraw } from "tldraw";
 import "tldraw/tldraw.css";
 import ConfirmDialog from "@/components/ConfirmDialog";
@@ -14,15 +14,17 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAppSidebar } from "@/contexts/AppSidebarContext";
 import useCurrentUser from "@/hooks/useCurrentUser";
 import { useResolvedTheme } from "@/hooks/useResolvedTheme";
-import { useUpdateWhiteboard } from "@/hooks/useWhiteboardQueries";
+import { useDuplicateWhiteboard, useUpdateWhiteboard } from "@/hooks/useWhiteboardQueries";
 import { useWhiteboardSession } from "@/hooks/useWhiteboardSession";
 import { cn } from "@/lib/utils";
+import { whiteboardConflictCopy } from "@/lib/whiteboard-conflict-copy";
 import type { Whiteboard } from "@/types/proto/api/whiteboard_service_pb";
 import { useTranslate } from "@/utils/i18n";
 import { isDarkTheme } from "@/utils/theme";
 import { createWhiteboardAssets, WHITEBOARD_IMAGE_TYPES } from "./assets";
 import { BACKGROUND_LAYOUTS, backgroundLayout } from "./background-layout";
-import { loadWhiteboardDocument, serializeWhiteboardDocument } from "./persistence";
+import { loadWhiteboardDocument, reloadWhiteboardDocument, serializeWhiteboardDocument } from "./persistence";
+import WhiteboardConflictNotice from "./WhiteboardConflictNotice";
 import { createWhiteboardThumbnails } from "./thumbnail";
 import { WHITEBOARD_COMPONENTS, WhiteboardBackgroundContext } from "./WhiteboardBackground";
 import { TOOL_DOCK_POSITIONS, useWhiteboardToolDock } from "./tool-dock-preferences";
@@ -47,7 +49,12 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
   const { whiteboardSidebarTargets, setMobileOpen } = useAppSidebar();
   const messages = useRef(t);
   messages.current = t;
-  const { mutateAsync: patch } = useUpdateWhiteboard(viewer, board.name);
+  const mutation = useUpdateWhiteboard(viewer, board.name, board.revision);
+  const { mutateAsync: patch, coordinator, conflict } = mutation;
+  const duplicate = useDuplicateWhiteboard(viewer);
+  const navigate = useNavigate();
+  const allowLeave = useRef(false);
+  const [recovering, setRecovering] = useState(false);
   const dark = isDarkTheme(useResolvedTheme());
   const dock = useWhiteboardToolDock();
   const dockPositions = useMemo(() => ({ toolbar: dock.position, styles: dock.stylePosition }), [dock.position, dock.stylePosition]);
@@ -90,6 +97,8 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
     initialTitle: board.title,
     initialTags: board.tags,
     initialBackground: backgroundLayout(board.backgroundLayout),
+    conflicted: conflict,
+    isConflicted: () => coordinator.getSnapshot().conflict,
     patch,
     getDocument: async (editor) => {
       await assets.whenIdle();
@@ -98,10 +107,10 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
     onDocumentSaved: () => thumbnails.current?.markSaved(),
   });
   const { attachDocument, isDocumentClean, isDirty, saveNow } = session;
-  const blocker = useBlocker(() => isDirty() || pending.current > 0);
+  const blocker = useBlocker(() => !allowLeave.current && (isDirty() || pending.current > 0));
   useEffect(() => {
     const beforeUnload = (event: BeforeUnloadEvent) => {
-      if (!isDirty() && pending.current === 0) return;
+      if (allowLeave.current || (!isDirty() && pending.current === 0)) return;
       event.preventDefault();
       event.returnValue = "";
     };
@@ -119,6 +128,24 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
       window.removeEventListener("keydown", keydown, true);
     };
   }, [isDirty, saveNow]);
+  const startThumbnails = useCallback((editor: Editor, initialThumbnail: string) => {
+    thumbnails.current?.dispose();
+    thumbnails.current = createWhiteboardThumbnails({
+      editor, initialThumbnail, canGenerate: isOwner, isClean: isDocumentClean,
+      link: (thumbnail) => patch({ whiteboard: { thumbnail }, updateMask: ["thumbnail"] }),
+      onError: () => {
+        if (!coordinator.getSnapshot().conflict)
+          toast.error(messages.current("whiteboards.thumbnail-error"), { id: "whiteboard-thumbnail-error" });
+      },
+    });
+    if (isOwner) thumbnails.current.markSaved();
+  }, [isOwner, isDocumentClean, patch, coordinator]);
+  useEffect(() => {
+    if (conflict) {
+      thumbnails.current?.dispose();
+      thumbnails.current = null;
+    }
+  }, [conflict]);
   const onMount = useCallback(
     (editor: Editor) => {
       editorRef.current = editor;
@@ -130,36 +157,62 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
         toast.error(messages.current("whiteboards.images-only"));
       });
       const stopDocument = attachDocument(editor);
-      const previews = createWhiteboardThumbnails({
-        editor,
-        initialThumbnail: board.thumbnail,
-        canGenerate: isOwner,
-        isClean: isDocumentClean,
-        link: (thumbnail) => patch({ whiteboard: { thumbnail }, updateMask: ["thumbnail"] }),
-        onError: () => toast.error(messages.current("whiteboards.thumbnail-error"), { id: "whiteboard-thumbnail-error" }),
-      });
-      thumbnails.current = previews;
-      // A prior session may have closed before its preview debounce fired.
-      if (isOwner) previews.markSaved();
+      startThumbnails(editor, board.thumbnail);
       return () => {
         detachWritingPen();
         stopDocument();
-        previews.dispose();
+        thumbnails.current?.dispose();
         thumbnails.current = null;
         if (editorRef.current === editor) editorRef.current = null;
       };
     },
-    [board, attachDocument, isDocumentClean, isOwner, patch, getProfile],
+    [board, attachDocument, startThumbnails, getProfile],
   );
+  const saveDuplicate = async () => {
+    const editor = editorRef.current;
+    if (!editor || recovering) return;
+    setRecovering(true);
+    try {
+      await assets.whenIdle();
+      const local = session.getMetadata();
+      const created = await duplicate.mutateAsync(whiteboardConflictCopy({
+        document: serializeWhiteboardDocument(editor), title: local.title, tags: local.tags, backgroundLayout: local.background,
+      }));
+      allowLeave.current = true;
+      navigate(`/${created.name}`);
+    } catch {
+      toast.error(messages.current("whiteboards.conflict-recovery-error"));
+    } finally {
+      setRecovering(false);
+    }
+  };
+  const reloadNewer = async () => {
+    const editor = editorRef.current;
+    if (!editor || recovering) return;
+    setRecovering(true);
+    try {
+      await session.whenIdle();
+      const latest = await mutation.reloadFromServer((latest) => {
+        session.replaceDocument(() => reloadWhiteboardDocument(editor, latest.document));
+        session.resetFromServer({ title: latest.title, tags: latest.tags, background: backgroundLayout(latest.backgroundLayout) });
+      });
+      startThumbnails(editor, latest.thumbnail);
+    } catch {
+      toast.error(messages.current("whiteboards.conflict-recovery-error"));
+    } finally {
+      setRecovering(false);
+    }
+  };
   const statusLabels = {
     saved: t("whiteboards.saved"),
     unsaved: t("whiteboards.unsaved"),
     saving: t("whiteboards.saving"),
     error: t("whiteboards.save-error"),
+    conflict: t("whiteboards.conflict-status"),
   };
   const sidebarControls = (
     <SidebarSection label={t("whiteboards.title")}>
-      <div className="whiteboard-ui flex flex-col gap-3 py-2 text-sm">
+      <div className="whiteboard-ui flex flex-col gap-3 py-2 text-sm" inert={recovering}>
         <Link
           to="/whiteboards"
           onClick={() => setMobileOpen(false)}
@@ -290,6 +343,17 @@ export default function WhiteboardEditor({ whiteboard }: { whiteboard: Whiteboar
         onConfirm={() => {
           if (blocker.state === "blocked") blocker.proceed();
         }}
+      />
+      {recovering && (
+        <div role="status" className="absolute inset-0 z-40 grid place-content-center bg-background/70">
+          {t("whiteboards.conflict-recovering")}
+        </div>
+      )}
+      <WhiteboardConflictNotice
+        conflict={conflict}
+        busy={recovering}
+        onDuplicate={() => { void saveDuplicate(); }}
+        onReload={() => { void reloadNewer(); }}
       />
     </div>
   );
